@@ -6,7 +6,7 @@ import pytz
 app = Flask(__name__)
 
 # ==============================================================================
-# TEMPLATE HTML: DUAL-PANEL CHART (HARGA & STOCHASTIC RSI SUB-PLOT)
+# TEMPLATE HTML: GABUNGAN FITUR 1 (SCANNER DENGAN REKOMENDASI) & FITUR 2 (KALKULATOR)
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -18,7 +18,7 @@ HTML_TEMPLATE = """
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121214; color: #e1e1e6; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { max-width: 800px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .container { max-width: 900px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1 { text-align: center; color: #00e676; margin-bottom: 5px; font-size: 28px; }
         p.subtitle { text-align: center; color: #8d8d99; margin-top: 0; margin-bottom: 30px; }
         
@@ -55,7 +55,12 @@ HTML_TEMPLATE = """
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
-        td { font-size: 15px; }
+        td { font-size: 14px; }
+        
+        /* Badge Status Rekomendasi Fitur 1 */
+        .badge-status { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; color: white; display: inline-block; text-align: center; }
+        .badge-entry { background-color: #00c853; border: 1px solid #00e676; }
+        .badge-wait { background-color: #b71c1c; border: 1px solid #ff4d4d; }
         
         .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; }
     </style>
@@ -89,6 +94,7 @@ HTML_TEMPLATE = """
         {% if potential_coins %}
             <div class="result-box">
                 <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 10 PASAR IDR TERBESAR</h3>
+                <p style="color: #8d8d99; font-size: 12px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume & Validasi Sinyal AI (Waktu: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
@@ -96,6 +102,8 @@ HTML_TEMPLATE = """
                             <th>Harga Sekarang</th>
                             <th>Kenaikan (24h)</th>
                             <th>Volume Pasar (24h)</th>
+                            <th>Rekomendasi AI</th>
+                            <th>Estimasi Jam Entry</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -107,10 +115,21 @@ HTML_TEMPLATE = """
                                 {{ "+" if coin.change > 0 else "" }}{{ "{:.2f}".format(coin.change) }}%
                             </td>
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
+                            <td>
+                                {% if coin.is_ready %}
+                                    <span class="badge-status badge-entry">LAYAK ENTRY</span>
+                                {% else %}
+                                    <span class="badge-status badge-wait">WAIT & SEE</span>
+                                {% endif %}
+                            </td>
+                            <td style="font-weight: bold; color: {% if coin.is_ready %}#00e676{% else %}#ffb300{% endif %};">
+                                {{ coin.entry_time_text }}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+                <p style="color: #8d8d99; font-size: 13px; margin-top: 15px;">💡 <em>Petunjuk: Salin simbol koin yang berstatus "LAYAK ENTRY" ke dalam Fitur 2 untuk menghitung target jaring harga beli dan jual secara otomatis!</em></p>
             </div>
         {% endif %}
 
@@ -187,7 +206,6 @@ HTML_TEMPLATE = """
 
             <script>
                 const ctx = document.getElementById('scalpingIndicatorChart').getContext('2d');
-                
                 const livePrice = {{ manual_result.latest_price }};
                 const vwapVal = {{ manual_result.vwap }};
                 const ema9Val = {{ manual_result.ema_9 }};
@@ -199,7 +217,6 @@ HTML_TEMPLATE = """
                     data: {
                         labels: ['-15m', '-10m', '-5m', 'Live Price'],
                         datasets: [
-                            // === PANEL ATAS: PERGERAKAN HARGA & INDIKATOR UTAMA ===
                             {
                                 label: 'Harga (IDR)',
                                 data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice],
@@ -234,7 +251,6 @@ HTML_TEMPLATE = """
                                 pointRadius: 0,
                                 yAxisID: 'y_price'
                             },
-                            // === PANEL BAWAH: STOCHASTIC RSI (0 - 100) ===
                             {
                                 label: 'Stochastic RSI (%)',
                                 data: [stochRsiVal * 0.6, stochRsiVal * 0.8, stochRsiVal * 0.9, stochRsiVal],
@@ -316,7 +332,7 @@ def home():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # FITUR 1: SCANNER PENUH PASAR INDODAX IDR
+        # FITUR 1: SCANNER PENUH DENGAN ANALISIS INDIKATOR REAL-TIME
         if action == "scan_potential":
             try:
                 tickers = exchange.fetch_tickers()
@@ -329,23 +345,56 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
+                        # Hitung perubahan harga
                         if high_price > 0 and low_price > 0:
                             harga_dasar = (high_price + low_price) / 2
                             change_24h = ((close_price - harga_dasar) / harga_dasar) * 100
                         else:
                             change_24h = ticker.get('percentage', 0) or 0.0
                         
-                        if volume_idr > 1000000000:  # Validasi volume di atas 1 Miliar IDR
+                        # Filter Liquiditas (di atas 1 Miliar IDR)
+                        if volume_idr > 1000000000:
+                            # Integrasi Kalkulasi Indikator Singkat untuk Scanner
+                            vwap_scan = (high_price + low_price + close_price) / 3
+                            ema_9_scan = (close_price * 0.7) + (high_price * 0.3)
+                            
+                            if high_price > low_price:
+                                stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100
+                            else:
+                                stoch_rsi_scan = 50.0
+                                
+                            # Cek validitas sinyal entry koin
+                            is_bullish_scan = close_price >= ema_9_scan
+                            is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.008 and stoch_rsi_scan < 80
+                            
+                            # Logika Penentuan Teks Estimasi Jam Entry di Tabel Scanner
+                            if is_ready_scan:
+                                entry_time_text = "SEKARANG"
+                            else:
+                                # Hitung estimasi waktu tunda berdasarkan Stochastic RSI koin tersebut
+                                if stoch_rsi_scan <= 20:
+                                    m_min, m_max = 10, 20
+                                elif stoch_rsi_scan >= 80:
+                                    m_min, m_max = 60, 120
+                                else:
+                                    m_min, m_max = 30, 60
+                                    
+                                t_min = (waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')
+                                t_max = (waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')
+                                entry_time_text = f"{t_min} - {t_max}"
+
                             all_idr_coins.append({
                                 "pair": symbol, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
+                                "is_ready": is_ready_scan, "entry_time_text": entry_time_text,
                                 "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
                             })
+                            
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None)
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai: {str(e)}")
 
-        # FITUR 2: KALKULATOR STRATEGI DAN FORMULA DINAMIS
+        # FITUR 2: KALKULATOR SCALPING
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
             symbol_ccxt = pair
@@ -378,16 +427,12 @@ def home():
                 elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
                 else: stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
-                # Syarat utama BOLEH ENTRY
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
-                # === LOGIKA DINAMIS TEKS ENTRY BERDASARKAN SIGNAL ===
                 if is_ready:
                     signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                     price_entry = latest_price
                     reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung harga dekat area VWAP, serta Stochastic RSI {stoch_rsi:.1f}% belum jenuh beli."
-                    
-                    # Teks ketika sinyal valid siap beli harian
                     entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
                     entry_color = "#00e676"
                 else:
@@ -395,7 +440,6 @@ def home():
                     price_entry = vwap
                     reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak menjauhi garis aman EMA/VWAP."
                     
-                    # Mengestimasi delay waktu mundur rilis posisi berdasarkan level Stochastic RSI saat ini
                     if stoch_rsi <= 20:
                         menit_tunggu_min, menit_tunggu_max = 10, 20
                     elif stoch_rsi >= 80:
@@ -406,7 +450,6 @@ def home():
                     jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
                     jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
                     
-                    # Teks berubah total menjadi NANTI ketika status masih Wait & See
                     entry_status_text = f"NANTI (Estimasi Open Posisi sekitar jam {jam_nanti_min} - {jam_nanti_max} WIB)"
                     entry_color = "#ffb300"
 
