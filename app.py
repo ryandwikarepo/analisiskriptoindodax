@@ -1,12 +1,13 @@
 from flask import Flask, render_template_string, request
 import ccxt
-import requests
 from datetime import datetime, timedelta
 import pytz
 
 app = Flask(__name__)
 
-# STRUKTUR HTML FINAL - DUAL CHART (HARGA & STOCHASTIC RSI SUB-PLOT)
+# ==============================================================================
+# TEMPLATE HTML: DUAL-PANEL CHART (HARGA & STOCHASTIC RSI SUB-PLOT)
+# ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -42,7 +43,6 @@ HTML_TEMPLATE = """
         .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; margin-bottom: 20px; position: relative; }
         .recommendation h3 { margin: 0 0 10px 0; color: #00e676; }
         
-        /* Wadah Canvas Chart Custom Luas untuk Menampung Sub-plot RSI */
         .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; }
         
         .indicator-list { background: #1b1b1f; padding: 15px; border-radius: 8px; font-size: 13px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
@@ -133,14 +133,14 @@ HTML_TEMPLATE = """
                         <p style="color: #00e676;">Rp {{ "{:,.2f}".format(manual_result.low_24h) }}</p>
                     </div>
                     <div class="card">
-                        <h4>Volume Global (CoinGecko)</h4>
+                        <h4>Status AI Volume</h4>
                         <p style="color: #00e676;">{{ manual_result.vol_status }}</p>
                     </div>
                 </div>
 
                 <h3 style="color: #00e676; margin-top: 25px; margin-bottom: 5px;">📈 Multi-Panel Indicator Chart AI</h3>
                 <div class="chart-container">
-                    <canvas id="scalpingIndicatorChart" style="height: 450px;"></canvas>
+                    <canvas id="scalpingIndicatorChart" style="height: 480px;"></canvas>
                 </div>
 
                 <div class="recommendation" style="border-left-color: {% if manual_result.is_ready %}#00e676{% else %}#ffb300{% endif %};">
@@ -152,10 +152,15 @@ HTML_TEMPLATE = """
                     </p>
                     <p style="color: #e1e1e6; line-height: 1.5; margin-bottom: 15px;">💡 <strong>ALASAN AI:</strong> {{ manual_result.reason }}</p>
                     
-                    <p style="color: #00e676;">🟢 <strong>JAM ENTRY:</strong> SEKARANG (Sebelum {{ manual_result.jam_entry_limit }} WIB)</p>
+                    <p>
+                        <strong style="color: {{ manual_result.entry_color }};">🟢 JAM ENTRY:</strong> 
+                        <span style="color: {{ manual_result.entry_color }}; font-weight: bold;">{{ manual_result.entry_status_text }}</span>
+                    </p>
+                    
                     <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
                     <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
                     <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
+                    <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
                     
                     <div class="indicator-list">
                         📈 <strong>Matriks Indikator Konfirmasi (EMA, Stochastic RSI, VWAP):</strong>
@@ -267,7 +272,6 @@ HTML_TEMPLATE = """
                             legend: { labels: { color: '#8d8d99', font: { size: 11 } } }
                         },
                         scales: {
-                            // Sumbu Kiri (Skala Harga Pasaran)
                             y_price: {
                                 type: 'linear',
                                 position: 'left',
@@ -275,7 +279,6 @@ HTML_TEMPLATE = """
                                 ticks: { color: '#fff' },
                                 title: { display: true, text: 'Harga Indodax', color: '#8d8d99' }
                             },
-                            // Sumbu Kanan Terpisah (Khusus Skala Persen 0-100 Stochastic RSI)
                             y_stoch: {
                                 type: 'linear',
                                 position: 'right',
@@ -299,6 +302,9 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# ==============================================================================
+# LOGIKA BACKEND FLASK
+# ==============================================================================
 @app.route('/', methods=['GET', 'POST'])
 def home():
     pair = "BTC/IDR"
@@ -310,6 +316,7 @@ def home():
     if request.method == 'POST':
         action = request.form.get('action')
 
+        # FITUR 1: SCANNER PENUH PASAR INDODAX IDR
         if action == "scan_potential":
             try:
                 tickers = exchange.fetch_tickers()
@@ -328,7 +335,7 @@ def home():
                         else:
                             change_24h = ticker.get('percentage', 0) or 0.0
                         
-                        if volume_idr > 1000000000:
+                        if volume_idr > 1000000000:  # Validasi volume di atas 1 Miliar IDR
                             all_idr_coins.append({
                                 "pair": symbol, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
                                 "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
@@ -338,6 +345,7 @@ def home():
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai: {str(e)}")
 
+        # FITUR 2: KALKULATOR STRATEGI DAN FORMULA DINAMIS
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
             symbol_ccxt = pair
@@ -370,16 +378,37 @@ def home():
                 elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
                 else: stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
+                # Syarat utama BOLEH ENTRY
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
+                # === LOGIKA DINAMIS TEKS ENTRY BERDASARKAN SIGNAL ===
                 if is_ready:
                     signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                     price_entry = latest_price
                     reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung harga dekat area VWAP, serta Stochastic RSI {stoch_rsi:.1f}% belum jenuh beli."
+                    
+                    # Teks ketika sinyal valid siap beli harian
+                    entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
+                    entry_color = "#00e676"
                 else:
                     signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
                     price_entry = vwap
-                    reason = f"AI mendeteksi anomali. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWAP premium."
+                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak menjauhi garis aman EMA/VWAP."
+                    
+                    # Mengestimasi delay waktu mundur rilis posisi berdasarkan level Stochastic RSI saat ini
+                    if stoch_rsi <= 20:
+                        menit_tunggu_min, menit_tunggu_max = 10, 20
+                    elif stoch_rsi >= 80:
+                        menit_tunggu_min, menit_tunggu_max = 60, 120
+                    else:
+                        menit_tunggu_min, menit_tunggu_max = 30, 60
+                        
+                    jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
+                    jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
+                    
+                    # Teks berubah total menjadi NANTI ketika status masih Wait & See
+                    entry_status_text = f"NANTI (Estimasi Open Posisi sekitar jam {jam_nanti_min} - {jam_nanti_max} WIB)"
+                    entry_color = "#ffb300"
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
@@ -389,12 +418,15 @@ def home():
                     "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
                     "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "TERVERIFIKASI",
                     "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
-                    "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
+                    "entry_status_text": entry_status_text, "entry_color": entry_color,
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
                 }
                 return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan atau jaringan sibuk: {str(e)}")
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
+
+if __name__ == '__main__':
+    app.run(debug=True)
