@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# Struktur HTML Bersih & Aman Tanpa Karakter Rusak
+# Struktur HTML Pro - Perbaikan Teks Rp Ganda & Penambahan Kolom Waktu Entry
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -16,7 +16,7 @@ HTML_TEMPLATE = """
     <title>Crypto Scalping AI Hub</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121214; color: #e1e1e6; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { max-width: 750px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .container { max-width: 800px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1 { text-align: center; color: #00e676; margin-bottom: 5px; font-size: 28px; }
         p.subtitle { text-align: center; color: #8d8d99; margin-top: 0; margin-bottom: 30px; }
         
@@ -44,10 +44,10 @@ HTML_TEMPLATE = """
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
-        td { font-size: 15px; }
+        td { font-size: 14px; }
         
-        .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #00e676; }
-        .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #ff4d4d; }
+        .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #00e676; display: block; text-align: center; }
+        .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #ff4d4d; display: block; text-align: center; }
         
         .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; }
     </style>
@@ -81,7 +81,7 @@ HTML_TEMPLATE = """
         {% if potential_coins %}
             <div class="result-box">
                 <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 5 PASAR IDR TERBESAR</h3>
-                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Kalkulasi perubahan 24 jam real-time berdasarkan pergerakan harga pasar (Waktu: {{ waktu }} WIB)</p>
+                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Kalkulasi perubahan harian & rekomendasi waktu eksekusi (Waktu Scan: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
@@ -90,29 +90,33 @@ HTML_TEMPLATE = """
                             <th>Kenaikan (24h)</th>
                             <th>Volume Pasar (24h)</th>
                             <th>Rekomendasi AI</th>
+                            <th>Estimasi Jam Entry</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for coin in potential_coins %}
                         <tr>
                             <td style="font-weight: bold; color: #fff;">{{ coin.pair }}</td>
-                            <td>Rp {{ "{:,.2f}".format(coin.price) if coin.price < 100 else "Rp {:,.0f}".format(coin.price) }}</td>
+                            <td>Rp {{ "{:,.2f}".format(coin.price) if coin.price < 100 else "{:,.0f}".format(coin.price) }}</td>
                             <td style="color: {% if coin.change > 0 %}#00e676{% elif coin.change < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
                                 {{ "+" if coin.change > 0 else "" }}{{ "{:.2f}".format(coin.change) }}%
                             </td>
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
                             <td>
                                 {% if coin.is_ideal %}
-                                    <span class="badge-status-ready">🟢 SIGN: LAYAK ENTRY</span>
+                                    <span class="badge-status-ready">LAYAK ENTRY</span>
                                 {% else %}
-                                    <span class="badge-status-wait">🔴 SIGN: WAIT & SEE</span>
+                                    <span class="badge-status-wait">WAIT & SEE</span>
                                 {% endif %}
+                            </td>
+                            <td style="font-weight: bold; color: {% if coin.is_ideal %}#00e676{% else %}#ffb300{% endif %};">
+                                {{ coin.entry_window }}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Salin koin bertanda hijau (LAYAK ENTRY) ke dalam Fitur 2 untuk menghitung titik profit +1.7% secara otomatis!</em></p>
+                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Jika jam entry berstatus "SEKARANG", segera masukkan simbol koin ke Fitur 2 untuk menghitung target jaring harga beli dan jualnya.</em></p>
             </div>
         {% endif %}
 
@@ -160,7 +164,8 @@ HTML_TEMPLATE = """
 def home():
     pair = "BTC/IDR"
     tz_jkt = pytz.timezone('Asia/Jakarta')
-    waktu_sekarang = datetime.now(tz_jkt).strftime('%d %B %Y, %H:%M')
+    waktu_sekarang_obj = datetime.now(tz_jkt)
+    waktu_sekarang = waktu_sekarang_obj.strftime('%d %B %Y, %H:%M')
     exchange = ccxt.indodax()
     
     if request.method == 'POST':
@@ -172,7 +177,6 @@ def home():
                 all_idr_coins = []
                 
                 for symbol, ticker in tickers.items():
-                    # Singkirkan BTC/IDR dan ETH/IDR agar radar koin alternatif (altcoins) lebih bervariasi
                     if symbol.endswith('/IDR') and symbol not in ['BTC/IDR', 'ETH/IDR']:
                         close_price = ticker.get('last', 0) or 0
                         high_price = ticker.get('high', 0) or 0
@@ -180,21 +184,28 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
-                        # ALGORITMA BYPASS PERSENTASE KOSONG (MENGGUNAKAN SIMULASI HARGA TENGAH HARIAN)
-                        # Teknik ini menjamin persentase tidak akan membeku di 0.00% lagi
                         if high_price > 0 and low_price > 0:
                             harga_dasar = (high_price + low_price) / 2
                             change_24h = ((close_price - harga_dasar) / harga_dasar) * 100
                         else:
                             change_24h = ticker.get('percentage', 0) or 0.0
                         
-                        # Membaca rasio pergerakan bid-ask langsung dari ticker live
                         bid = ticker.get('bid', 0) or 1
                         ask = ticker.get('ask', 0) or 1
                         ratio = round((bid / ask), 2) if ask > 0 else 1.0
                         
-                        # Syarat Sinyal Hijau (Layak Entry): Tren di atas dasar (+0.2%) dan kekuatan beli berlanjut
                         is_ideal = (change_24h > 0.2) and (ratio >= 1.02)
+                        
+                        # MATRIKS LOGIKA PENENTUAN JAM LAYAK ENTRY RADAR
+                        if is_ideal:
+                            # Jika momentum hijau kuat, langsung masuk sekarang juga! Jendela transaksi 15 menit ke depan.
+                            batas_waktu = waktu_sekarang_obj + timedelta(minutes=15)
+                            entry_window = f"SEKARANG - {batas_waktu.strftime('%H:%M')}"
+                        else:
+                            # Jika tren konsolidasi/turun, tunda entry dan pantau ulang 1 hingga 2 jam ke depan
+                            jam_mulai = waktu_sekarang_obj + timedelta(hours=1)
+                            jam_selesai = waktu_sekarang_obj + timedelta(hours=2)
+                            entry_window = f"{jam_mulai.strftime('%H:%M')} - {jam_selesai.strftime('%H:%M')}"
                         
                         all_idr_coins.append({
                             "pair": symbol,
@@ -203,10 +214,10 @@ def home():
                             "volume_raw": volume_idr,
                             "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
                             "ratio": ratio,
-                            "is_ideal": is_ideal
+                            "is_ideal": is_ideal,
+                            "entry_window": entry_window
                         })
                 
-                # Mengurutkan berdasarkan volume transaksi uang terbesar di bursa harian
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 top_5 = top_volume_coins[:5]
                 
@@ -249,16 +260,15 @@ def home():
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
-                waktu_obj = datetime.now(tz_jkt)
                 
                 data_res = {
                     "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vol_status": vol_status,
                     "signal": signal, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
-                    "jam_entry_limit": (waktu_obj + timedelta(minutes=15)).strftime("%H:%M"),
-                    "waktu_tp_awal": (waktu_obj + timedelta(minutes=15)).strftime("%H:%M"),
-                    "waktu_tp_akhir": (waktu_obj + timedelta(minutes=45)).strftime("%H:%M")
+                    "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
+                    "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
+                    "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
                 }
-                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=data_res, waktu=waktu_obj.strftime('%d %B %Y, %H:%M'), error=None)
+                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan. Detail: {str(e)}")
                 
