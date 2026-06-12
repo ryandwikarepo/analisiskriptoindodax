@@ -6,7 +6,7 @@ import pytz
 app = Flask(__name__)
 
 # ==============================================================================
-# TEMPLATE HTML: GABUNGAN FITUR 1 (SCANNER DENGAN REKOMENDASI) & FITUR 2 (KALKULATOR)
+# TEMPLATE HTML: ADVANCED MATRIX VALIDATOR TERMINAL
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -45,19 +45,22 @@ HTML_TEMPLATE = """
         
         .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; }
         
-        .indicator-list { background: #1b1b1f; padding: 15px; border-radius: 8px; font-size: 13px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
-        .indicator-list ul { margin: 5px 0 0 0; padding-left: 15px; }
-        .indicator-list li { margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; }
+        /* Modifikasi Elemen Matriks Indikator */
+        .indicator-list { background: #1b1b1f; padding: 20px; border-radius: 8px; font-size: 14px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
+        .indicator-list ul { margin: 10px 0 0 0; padding-left: 0; list-style: none; }
+        .indicator-list li { margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #29292e; }
+        .indicator-list li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
         
-        .stoch-gauge-container { width: 120px; height: 10px; background-color: #4d4d57; border-radius: 5px; overflow: hidden; margin-left: 10px; position: relative; border: 1px solid #29292e;}
+        .indicator-header { display: flex; align-items: center; justify-content: space-between; font-weight: bold; }
+        .indicator-rule { font-size: 12px; color: #71717a; margin-top: 4px; display: block; font-style: italic; }
+        
+        .stoch-gauge-container { width: 120px; height: 10px; background-color: #4d4d57; border-radius: 5px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 10px; position: relative; border: 1px solid #29292e;}
         .stoch-gauge-fill { height: 100%; position: absolute; top: 0; left: 0; transition: width 0.3s ease; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
-        td { font-size: 14px; }
         
-        /* Badge Status Rekomendasi Fitur 1 */
         .badge-status { padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 12px; color: white; display: inline-block; text-align: center; }
         .badge-entry { background-color: #00c853; border: 1px solid #00e676; }
         .badge-wait { background-color: #b71c1c; border: 1px solid #ff4d4d; }
@@ -129,7 +132,6 @@ HTML_TEMPLATE = """
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="color: #8d8d99; font-size: 13px; margin-top: 15px;">💡 <em>Petunjuk: Salin simbol koin yang berstatus "LAYAK ENTRY" ke dalam Fitur 2 untuk menghitung target jaring harga beli dan jual secara otomatis!</em></p>
             </div>
         {% endif %}
 
@@ -157,7 +159,6 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <h3 style="color: #00e676; margin-top: 25px; margin-bottom: 5px;">📈 Multi-Panel Indicator Chart AI</h3>
                 <div class="chart-container">
                     <canvas id="scalpingIndicatorChart" style="height: 480px;"></canvas>
                 </div>
@@ -182,22 +183,43 @@ HTML_TEMPLATE = """
                     <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
                     
                     <div class="indicator-list">
-                        📈 <strong>Matriks Indikator Konfirmasi (EMA, Stochastic RSI, VWAP):</strong>
+                        📋 <strong>Matriks Indikator Konfirmasi Analisis Teknikal:</strong>
                         <ul>
                             <li>
-                                <span><strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}</span>
-                                <span style="font-weight: bold; color: {% if manual_result.is_bullish %}#00e676{% else %}#ff4d4d{% endif %}; margin-left: 10px;">
-                                    {% if manual_result.is_bullish %}↑ Bullish ↑{% else %}↓ Bearish Rejection ↓{% endif %}
-                                </span>
-                            </li>
-                            <li>
-                                <span><strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})</span>
-                                <div class="stoch-gauge-container">
-                                    <div class="stoch-gauge-fill" style="width: {{ manual_result.stoch_rsi }}%; background-color: {% if manual_result.stoch_rsi >= 80 %}#ff4d4d{% elif manual_result.stoch_rsi <= 20 %}#00e676{% else %}#ffb300{% endif %};"></div>
+                                <div class="indicator-header">
+                                    <span>
+                                        {% if manual_result.is_bullish %}✅{% else %}❌{% endif %} 
+                                        <strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}
+                                    </span>
+                                    <span style="color: {% if manual_result.is_bullish %}#00e676{% else %}#ff4d4d{% endif %};">
+                                        {% if manual_result.is_bullish %}Bullish Structure{% else %}Bearish Rejection{% endif %}
+                                    </span>
                                 </div>
+                                <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9 (Tren Naik). Jika di bawah EMA 9, harga rawan jatuh terseret longsor ke bawah.</span>
                             </li>
+                            
                             <li>
-                                <span><strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }} ({% if manual_result.latest_price <= manual_result.vwap %}Di Bawah VWAP / Diskon{% else %}Di Atas VWAP / Premium{% endif %})</span>
+                                <div class="indicator-header">
+                                    <span>
+                                        {% if manual_result.stoch_rsi < 80 %}✅{% else %}❌{% endif %}
+                                        <strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})
+                                    </span>
+                                    <div class="stoch-gauge-container">
+                                        <div class="stoch-gauge-fill" style="width: {{ manual_result.stoch_rsi }}%; background-color: {% if manual_result.stoch_rsi >= 80 %}#ff4d4d{% elif manual_result.stoch_rsi <= 20 %}#00e676{% else %}#ffb300{% endif %};"></div>
+                                    </div>
+                                </div>
+                                <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80% (Aman/Oversold/Squeeze). Jika di atas 80% (Overbought), pasar sudah terlalu jenuh beli dan rawan aksi ambil untung massal (Dump).</span>
+                            </li>
+                            
+                            <li>
+                                <div class="indicator-header">
+                                    <span>
+                                        {% if manual_result.latest_price <= manual_result.vwap * 1.008 %}✅{% else %}❌{% endif %}
+                                        <strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }} 
+                                        ({% if manual_result.latest_price <= manual_result.vwap %}Diskon / Undervalued{% else %}Premium / Overvalued{% endif %})
+                                    </span>
+                                </div>
+                                <span class="indicator-rule">📌 Syarat Lolos: Posisi harga terakhir tidak boleh melebihi 0.8% di atas garis tengah VWAP. Membeli terlalu jauh di atas VWAP meningkatkan risiko nyangkut di pucuk harga rata-rata bandar.</span>
                             </li>
                         </ul>
                     </div>
@@ -332,7 +354,7 @@ def home():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # FITUR 1: SCANNER PENUH DENGAN ANALISIS INDIKATOR REAL-TIME
+        # FITUR 1: SCANNER
         if action == "scan_potential":
             try:
                 tickers = exchange.fetch_tickers()
@@ -345,16 +367,13 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
-                        # Hitung perubahan harga
                         if high_price > 0 and low_price > 0:
                             harga_dasar = (high_price + low_price) / 2
                             change_24h = ((close_price - harga_dasar) / harga_dasar) * 100
                         else:
                             change_24h = ticker.get('percentage', 0) or 0.0
                         
-                        # Filter Liquiditas (di atas 1 Miliar IDR)
                         if volume_idr > 1000000000:
-                            # Integrasi Kalkulasi Indikator Singkat untuk Scanner
                             vwap_scan = (high_price + low_price + close_price) / 3
                             ema_9_scan = (close_price * 0.7) + (high_price * 0.3)
                             
@@ -363,21 +382,15 @@ def home():
                             else:
                                 stoch_rsi_scan = 50.0
                                 
-                            # Cek validitas sinyal entry koin
                             is_bullish_scan = close_price >= ema_9_scan
                             is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.008 and stoch_rsi_scan < 80
                             
-                            # Logika Penentuan Teks Estimasi Jam Entry di Tabel Scanner
                             if is_ready_scan:
                                 entry_time_text = "SEKARANG"
                             else:
-                                # Hitung estimasi waktu tunda berdasarkan Stochastic RSI koin tersebut
-                                if stoch_rsi_scan <= 20:
-                                    m_min, m_max = 10, 20
-                                elif stoch_rsi_scan >= 80:
-                                    m_min, m_max = 60, 120
-                                else:
-                                    m_min, m_max = 30, 60
+                                if stoch_rsi_scan <= 20: m_min, m_max = 10, 20
+                                elif stoch_rsi_scan >= 80: m_min, m_max = 60, 120
+                                else: m_min, m_max = 30, 60
                                     
                                 t_min = (waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')
                                 t_max = (waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')
@@ -394,7 +407,7 @@ def home():
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai: {str(e)}")
 
-        # FITUR 2: KALKULATOR SCALPING
+        # FITUR 2: KALKULATOR
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
             symbol_ccxt = pair
@@ -415,7 +428,7 @@ def home():
                     ema_status = "BULLISH (Harga stabil di atas EMA 9/21)"
                     is_bullish = True
                 else:
-                    ema_status = "BEARISH REJECTION (Harga tertolak turun)"
+                    ema_status = "BEARISH REJECTION (Harga tertolak di bawah EMA 9)"
                     is_bullish = False
 
                 if high_24h > low_24h:
@@ -427,6 +440,7 @@ def home():
                 elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
                 else: stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
+                # Aturan utama masuk pasar
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
                 if is_ready:
@@ -438,14 +452,11 @@ def home():
                 else:
                     signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
                     price_entry = vwap
-                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak menjauhi garis aman EMA/VWAP."
+                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Silakan amati tanda silang (❌) pada matriks di bawah untuk melihat batas indikator yang dilanggar."
                     
-                    if stoch_rsi <= 20:
-                        menit_tunggu_min, menit_tunggu_max = 10, 20
-                    elif stoch_rsi >= 80:
-                        menit_tunggu_min, menit_tunggu_max = 60, 120
-                    else:
-                        menit_tunggu_min, menit_tunggu_max = 30, 60
+                    if stoch_rsi <= 20: menit_tunggu_min, menit_tunggu_max = 10, 20
+                    elif stoch_rsi >= 80: menit_tunggu_min, menit_tunggu_max = 60, 120
+                    else: menit_tunggu_min, menit_tunggu_max = 30, 60
                         
                     jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
                     jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
