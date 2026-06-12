@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# Struktur HTML Pro - Perbaikan Teks Rp Ganda & Penambahan Kolom Waktu Entry
+# Struktur HTML Bersih Tanpa Kolom Waktu Entry - Diperluas ke TOP 10 KOIN
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -16,7 +16,7 @@ HTML_TEMPLATE = """
     <title>Crypto Scalping AI Hub</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121214; color: #e1e1e6; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { max-width: 800px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .container { max-width: 750px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1 { text-align: center; color: #00e676; margin-bottom: 5px; font-size: 28px; }
         p.subtitle { text-align: center; color: #8d8d99; margin-top: 0; margin-bottom: 30px; }
         
@@ -44,10 +44,10 @@ HTML_TEMPLATE = """
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
-        td { font-size: 14px; }
+        td { font-size: 15px; }
         
-        .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #00e676; display: block; text-align: center; }
-        .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 11px; font-weight: bold; border: 1px solid #ff4d4d; display: block; text-align: center; }
+        .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #00e676; }
+        .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #ff4d4d; }
         
         .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; }
     </style>
@@ -61,7 +61,7 @@ HTML_TEMPLATE = """
             <div class="menu-title">🔍 FITUR 1: CRYPTO SCANNER RADAR</div>
             <form method="POST">
                 <input type="hidden" name="action" value="scan_potential">
-                <button type="submit" class="btn-scanner">🚀 Analisis Koin Potensial (Scan Top Pasar IDR)</button>
+                <button type="submit" class="btn-scanner">🚀 Analisis Koin Potensial (Scan Top 10 Pasar IDR)</button>
             </form>
         </div>
 
@@ -80,8 +80,8 @@ HTML_TEMPLATE = """
 
         {% if potential_coins %}
             <div class="result-box">
-                <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 5 PASAR IDR TERBESAR</h3>
-                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Kalkulasi perubahan harian & rekomendasi waktu eksekusi (Waktu Scan: {{ waktu }} WIB)</p>
+                <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 10 PASAR IDR TERBESAR</h3>
+                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume harian terbesar bursa (Waktu Scan: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
@@ -90,7 +90,6 @@ HTML_TEMPLATE = """
                             <th>Kenaikan (24h)</th>
                             <th>Volume Pasar (24h)</th>
                             <th>Rekomendasi AI</th>
-                            <th>Estimasi Jam Entry</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -109,14 +108,11 @@ HTML_TEMPLATE = """
                                     <span class="badge-status-wait">WAIT & SEE</span>
                                 {% endif %}
                             </td>
-                            <td style="font-weight: bold; color: {% if coin.is_ideal %}#00e676{% else %}#ffb300{% endif %};">
-                                {{ coin.entry_window }}
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Jika jam entry berstatus "SEKARANG", segera masukkan simbol koin ke Fitur 2 untuk menghitung target jaring harga beli dan jualnya.</em></p>
+                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Ambil koin dengan pergerakan volume masif dan persentase positif stabil, masukkan kodenya ke Fitur 2 untuk menjaring harga beli.</em></p>
             </div>
         {% endif %}
 
@@ -196,17 +192,6 @@ def home():
                         
                         is_ideal = (change_24h > 0.2) and (ratio >= 1.02)
                         
-                        # MATRIKS LOGIKA PENENTUAN JAM LAYAK ENTRY RADAR
-                        if is_ideal:
-                            # Jika momentum hijau kuat, langsung masuk sekarang juga! Jendela transaksi 15 menit ke depan.
-                            batas_waktu = waktu_sekarang_obj + timedelta(minutes=15)
-                            entry_window = f"SEKARANG - {batas_waktu.strftime('%H:%M')}"
-                        else:
-                            # Jika tren konsolidasi/turun, tunda entry dan pantau ulang 1 hingga 2 jam ke depan
-                            jam_mulai = waktu_sekarang_obj + timedelta(hours=1)
-                            jam_selesai = waktu_sekarang_obj + timedelta(hours=2)
-                            entry_window = f"{jam_mulai.strftime('%H:%M')} - {jam_selesai.strftime('%H:%M')}"
-                        
                         all_idr_coins.append({
                             "pair": symbol,
                             "price": close_price,
@@ -214,14 +199,14 @@ def home():
                             "volume_raw": volume_idr,
                             "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
                             "ratio": ratio,
-                            "is_ideal": is_ideal,
-                            "entry_window": entry_window
+                            "is_ideal": is_ideal
                         })
                 
+                # URUTKAN BERDASARKAN VOLUME DAN AMBIL 10 KOIN TERBANYAK
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
-                top_5 = top_volume_coins[:5]
+                top_10 = top_volume_coins[:10]
                 
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_5, manual_result=None, waktu=waktu_sekarang, error=None)
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_10, manual_result=None, waktu=waktu_sekarang, error=None)
                 
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai pasar: {str(e)}")
