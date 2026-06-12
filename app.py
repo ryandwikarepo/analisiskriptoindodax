@@ -6,7 +6,6 @@ import pytz
 
 app = Flask(__name__)
 
-# Tampilan HTML + CSS Modern yang mendukung Dua Fitur Utama
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -45,7 +44,10 @@ HTML_TEMPLATE = """
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
         td { font-size: 15px; }
-        .badge-green { background: #1b3a24; color: #00e676; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        
+        /* Badges Dinamis Sesuai Instruksi */
+        .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #00e676; }
+        .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #ff4d4d; }
         
         .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; }
     </style>
@@ -59,7 +61,7 @@ HTML_TEMPLATE = """
             <div class="menu-title">🔍 FITUR 1: CRYPTO SCANNER RADAR</div>
             <form method="POST">
                 <input type="hidden" name="action" value="scan_potential">
-                <button type="submit" class="btn-scanner">🚀 Analisis Koin Potensial (Scan Seluruh Pasar IDR)</button>
+                <button type="submit" class="btn-scanner">🚀 Analisis Koin Potensial (Scan Top Pasar IDR)</button>
             </form>
         </div>
 
@@ -67,7 +69,7 @@ HTML_TEMPLATE = """
             <div class="menu-title">💵 FITUR 2: KALKULATOR SCALPING INSTAN (+1.7%)</div>
             <form method="POST" class="flex-form">
                 <input type="hidden" name="action" value="analyze_manual">
-                <input type="text" name="pair" placeholder="Contoh: BTC/IDR atau SOL/IDR" value="{{ pair }}" required>
+                <input type="text" name="pair" placeholder="Contoh: BTC/IDR" value="{{ pair }}" required>
                 <button type="submit" class="btn-scalping">Analisis Scalping Koin</button>
             </form>
         </div>
@@ -78,16 +80,16 @@ HTML_TEMPLATE = """
 
         {% if potential_coins %}
             <div class="result-box">
-                <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 TOP 5 KOIN PALING POTENSIAL DETIK INI</h3>
-                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Diurutkan otomatis berdasarkan kekuatan akumulasi Order Book & Volume (Waktu: {{ waktu }} WIB)</p>
+                <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 5 PASAR IDR TERBESAR</h3>
+                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume & Kekuatan Order Book (Waktu: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
                             <th>Pair Koin</th>
                             <th>Harga Sekarang</th>
                             <th>Kenaikan (24h)</th>
-                            <th>Volume (24h)</th>
-                            <th>Order Book Status</th>
+                            <th>Volume Pasar (24h)</th>
+                            <th>Rekomendasi AI</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -95,14 +97,22 @@ HTML_TEMPLATE = """
                         <tr>
                             <td style="font-weight: bold; color: #fff;">{{ coin.pair }}</td>
                             <td>Rp {{ "{:,.0f}".format(coin.price) }}</td>
-                            <td style="color: #00e676;">+{{ "{:.2f}".format(coin.change) }}%</td>
+                            <td style="color: {% if coin.change >= 0 %}#00e676{% else %}#ff4d4d{% endif %};">
+                                {{ "+" if coin.change >= 0 else "" }}{{ "{:.2f}".format(coin.change) }}%
+                            </td>
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
-                            <td><span class="badge-green">🟢 Buyer Kuat ({{ coin.ratio }}x)</span></td>
+                            <td>
+                                {% if coin.is_ideal %}
+                                    <span class="badge-status-ready">🟢 SIGN: LAYAK ENTRY</span>
+                                {% else %}
+                                    <span class="badge-status-wait">🔴 SIGN: WAIT & SEE</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="font-size: 13px; color: #8d8d99; margin-top: 12px;">💡 <em>Tips: Ambil simbol koin teratas, lalu masukkan ke Fitur 2 di atas untuk eksekusi target profit +1.7%.</em></p>
+                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Koin bertanda hijau (LAYAK ENTRY) memiliki kekuatan dinding beli yang tebal. Ketik simbolnya di Fitur 2 untuk detail target profit!</em></p>
             </div>
         {% endif %}
 
@@ -151,72 +161,66 @@ def home():
     pair = "BTC/IDR"
     tz_jkt = pytz.timezone('Asia/Jakarta')
     waktu_sekarang = datetime.now(tz_jkt).strftime('%d %B %Y, %H:%M')
+    exchange = ccxt.indodax()
     
     if request.method == 'POST':
         action = request.form.get('action')
-        exchange = ccxt.indodax()
 
-        # --- LOGIKA TOMBOL 1: ANALISIS KOIN POTENSIAL (SCANNER) ---
+        # --- REVISI LOGIKA FITUR 1: SCANNER TOP 5 PERMANEN ---
         if action == "scan_potential":
             try:
                 tickers = exchange.fetch_tickers()
-                valid_coins = []
+                all_idr_coins = []
                 
                 for symbol, ticker in tickers.items():
-                    # Hanya scan pasar IDR dan singkirkan koin utama yang terlalu stabil (seperti BTC atau ETH) demi mencari koin volatilitas tinggi
+                    # Fokus koin IDR (Kecuali BTC & ETH agar bervariasi)
                     if symbol.endswith('/IDR') and symbol not in ['BTC/IDR', 'ETH/IDR']:
                         change_24h = ticker.get('percentage', 0) or 0
                         base_volume = ticker.get('baseVolume', 0) or 0
                         close_price = ticker.get('last', 0) or 0
+                        volume_idr = base_volume * close_price
                         
-                        # Filter 1: Kenaikan sehat antara +2% s/d +15% (Bukan koin mati, bukan koin yang sudah over-pumped)
-                        # Filter 2: Volume perdagangan harian harus aktif (di atas 100 juta rupiah)
-                        if (2.0 <= change_24h <= 15.0) and (base_volume * close_price > 100000000):
-                            volume_idr = base_volume * close_price
-                            
-                            # Trik Order Book Rasio Singkat (Simulasi bobot buyer)
-                            # Menggunakan data ticker untuk efisiensi kecepatan bypass vwap/bids massal
-                            bid = ticker.get('bid', 0) or 1
-                            ask = ticker.get('ask', 0) or 1
-                            ratio = round((bid / ask), 2) if ask > 0 else 1.0
-                            
-                            valid_coins.append({
-                                "pair": symbol,
-                                "price": close_price,
-                                "change": change_24h,
-                                "volume_raw": volume_idr,
-                                "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
-                                "ratio": ratio
-                            })
+                        bid = ticker.get('bid', 0) or 1
+                        ask = ticker.get('ask', 0) or 1
+                        ratio = round((bid / ask), 2) if ask > 0 else 1.0
+                        
+                        # Aturan kelayakan: Kenaikan positif (di atas 1%) dan rasio dinding beli tebal (> 1.15)
+                        is_ideal = (change_24h >= 1.0) and (ratio > 1.15)
+                        
+                        all_idr_coins.append({
+                            "pair": symbol,
+                            "price": close_price,
+                            "change": change_24h,
+                            "volume_raw": volume_idr,
+                            "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
+                            "ratio": ratio,
+                            "is_ideal": is_ideal
+                        })
                 
-                # URUTAN OTOMATIS: Koin dengan rasio buyer & volume tertinggi didorong ke paling atas (Rekomendasi Utama)
-                valid_coins = sorted(valid_coins, key=lambda x: (x['ratio'], x['volume_raw']), reverse=True)
-                top_5 = valid_coins[:5]
+                # Mengurutkan murni berdasarkan volume transaksi terbesar harian
+                top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
+                top_5 = top_volume_coins[:5]
                 
-                if not top_5:
-                    return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error="Saat ini belum ada koin IDR yang memenuhi kriteria volatilitas sehat (+2% s/d +15%). Coba beberapa saat lagi.")
-                    
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_5, manual_result=None, waktu=waktu_sekarang, error=None)
                 
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai pasar: {str(e)}")
 
-        # --- LOGIKA TOMBOL 2: ANALISIS SCALPING KOIN (MANUAL) ---
+        # --- LOGIKA FITUR 2: KALKULATOR SCALPING MANUAL ---
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
             symbol_ccxt = pair
             if '/' not in symbol_ccxt:
                 if symbol_ccxt.endswith("IDR"): symbol_ccxt = symbol_ccxt[:-3] + "/IDR"
-                elif symbol_ccxt.endswith("USDT"): symbol_ccxt = symbol_ccxt[:-4] + "/USDT"
 
             try:
                 ticker = exchange.fetch_ticker(symbol_ccxt)
                 latest_price = float(ticker['last'])
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
-                
                 mid_price = (high_24h + low_24h + latest_price) / 3
                 
+                # Cek Volume global kilat
                 coin_id = symbol_ccxt.split('/')[0].lower()
                 mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
                 gecko_id = mapping.get(coin_id, coin_id)
@@ -238,7 +242,6 @@ def home():
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
-                
                 waktu_obj = datetime.now(tz_jkt)
                 
                 data_res = {
