@@ -45,7 +45,6 @@ HTML_TEMPLATE = """
         th { background-color: #29292e; color: #00e676; font-size: 14px; }
         td { font-size: 15px; }
         
-        /* Badges Dinamis Sesuai Instruksi */
         .badge-status-ready { background: #1b3a24; color: #00e676; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #00e676; }
         .badge-status-wait { background: #3a1a1a; color: #ff4d4d; padding: 5px 10px; border-radius: 4px; font-size: 12px; font-weight: bold; border: 1px solid #ff4d4d; }
         
@@ -81,7 +80,7 @@ HTML_TEMPLATE = """
         {% if potential_coins %}
             <div class="result-box">
                 <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 5 PASAR IDR TERBESAR</h3>
-                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume & Kekuatan Order Book (Waktu: {{ waktu }} WIB)</p>
+                <p style="color: #8d8d99; font-size: 13px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume & Kalkulasi Perubahan Harga Akurat (Waktu: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
@@ -96,8 +95,8 @@ HTML_TEMPLATE = """
                         {% for coin in potential_coins %}
                         <tr>
                             <td style="font-weight: bold; color: #fff;">{{ coin.pair }}</td>
-                            <td>Rp {{ "{:,.0f}".format(coin.price) }}</td>
-                            <td style="color: {% if coin.change >= 0 %}#00e676{% else %}#ff4d4d{% endif %};">
+                            <td>Rp {{ "{:,.2f}".format(coin.price) if coin.price < 100 else "Rp {:,.0f}".format(coin.price) }}</td>
+                            <td style="color: {% if coin.change >= 0 %}#00e676{% else %}#ff4d4d{% endif %}; font-weight: bold;">
                                 {{ "+" if coin.change >= 0 else "" }}{{ "{:.2f}".format(coin.change) }}%
                             </td>
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
@@ -112,7 +111,7 @@ HTML_TEMPLATE = """
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Koin bertanda hijau (LAYAK ENTRY) memiliki kekuatan dinding beli yang tebal. Ketik simbolnya di Fitur 2 untuk detail target profit!</em></p>
+                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Cari koin yang persentase kenaikannya stabil (+1% s/d +10%) dengan tanda hijau untuk peluang scalping terbaik.</em></p>
             </div>
         {% endif %}
 
@@ -166,26 +165,31 @@ def home():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # --- REVISI LOGIKA FITUR 1: SCANNER TOP 5 PERMANEN ---
         if action == "scan_potential":
             try:
                 tickers = exchange.fetch_tickers()
                 all_idr_coins = []
                 
                 for symbol, ticker in tickers.items():
-                    # Fokus koin IDR (Kecuali BTC & ETH agar bervariasi)
                     if symbol.endswith('/IDR') and symbol not in ['BTC/IDR', 'ETH/IDR']:
-                        change_24h = ticker.get('percentage', 0) or 0
-                        base_volume = ticker.get('baseVolume', 0) or 0
                         close_price = ticker.get('last', 0) or 0
+                        open_price = ticker.get('open', 0) or 0
+                        base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
+                        
+                        # KALKULASI MANUAL MANDIRI JIKA PERSENTASE API INDODAX KOSONG (0)
+                        if open_price > 0:
+                            change_24h = ((close_price - open_price) / open_price) * 100
+                        else:
+                            change_24h = ticker.get('percentage', 0) or 0
                         
                         bid = ticker.get('bid', 0) or 1
                         ask = ticker.get('ask', 0) or 1
                         ratio = round((bid / ask), 2) if ask > 0 else 1.0
                         
-                        # Aturan kelayakan: Kenaikan positif (di atas 1%) dan rasio dinding beli tebal (> 1.15)
-                        is_ideal = (change_24h >= 1.0) and (ratio > 1.15)
+                        # Parameter Evaluasi Hijau yang Rasional:
+                        # Koin harus menguat secara nyata (> 0.5%) dan rasio antrean bid memotong ask (> 1.05)
+                        is_ideal = (change_24h >= 0.5) and (ratio > 1.05)
                         
                         all_idr_coins.append({
                             "pair": symbol,
@@ -197,7 +201,7 @@ def home():
                             "is_ideal": is_ideal
                         })
                 
-                # Mengurutkan murni berdasarkan volume transaksi terbesar harian
+                # Urutkan mutlak berdasarkan koin yang perputaran uangnya paling deras di pasar
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 top_5 = top_volume_coins[:5]
                 
@@ -206,7 +210,6 @@ def home():
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai pasar: {str(e)}")
 
-        # --- LOGIKA FITUR 2: KALKULATOR SCALPING MANUAL ---
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
             symbol_ccxt = pair
@@ -220,7 +223,6 @@ def home():
                 low_24h = float(ticker['low'])
                 mid_price = (high_24h + low_24h + latest_price) / 3
                 
-                # Cek Volume global kilat
                 coin_id = symbol_ccxt.split('/')[0].lower()
                 mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
                 gecko_id = mapping.get(coin_id, coin_id)
