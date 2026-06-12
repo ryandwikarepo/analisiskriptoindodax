@@ -1,0 +1,11 @@
+{
+  "framework": "streamlit",
+  "buildCommand": "pip install -r requirements.txt",
+  "outputDirectory": ".",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "app.py"
+    }
+  ]
+}
