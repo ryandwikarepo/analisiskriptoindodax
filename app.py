@@ -4,11 +4,10 @@ import pandas as pd
 import pandas_ta as ta
 import requests
 from datetime import datetime, timedelta
+import pytz
 
-# INI VARIABEL "app" YANG DICARI VERCEL - SEKARANG DIJAMIN AMAN
 app = Flask(__name__)
 
-# Desain Tampilan Website langsung di dalam kode Python (HTML + CSS Modern)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -32,7 +31,7 @@ HTML_TEMPLATE = """
         .card p { margin: 0; font-size: 18px; font-weight: bold; }
         .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; }
         .recommendation h3 { margin: 0 0 10px 0; color: #00e676; }
-        .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; }
+        .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -46,7 +45,7 @@ HTML_TEMPLATE = """
         </form>
 
         {% if error %}
-            <div class="error">⚠️ <strong>Error:</strong> {{ error }}</div>
+            <div class="error">⚠️ <strong>Error Analisis:</strong> {{ error }}</div>
         {% endif %}
 
         {% if result %}
@@ -73,7 +72,7 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div class="recommendation" style="border-left-color: {% if 'STRONG' in result.signal %}#00e676{% elif 'AMAN' in result.signal %}#2196f3{% else '#ffeb3b'{% endif %};">
+                <div class="recommendation" style="border-left-color: {% if 'STRONG' in result.signal %}#00e676{% elif 'AMAN' in result.signal %}#2196f3{% else %}#ffeb3b{% endif %};">
                     <h3>🚨 REKOMENDASI SKENARIO</h3>
                     <p><strong>KESIMPULAN:</strong> {{ result.signal }}</p>
                     <p style="color: #00e676;">🟢 <strong>JAM ENTRY:</strong> SEKARANG (Sebelum {{ result.jam_entry_limit }} WIB)</p>
@@ -97,44 +96,51 @@ def home():
         try:
             exchange = ccxt.indodax()
             ohlcv = exchange.fetch_ohlcv(pair, timeframe='5m', limit=100)
+            
+            if not ohlcv or len(ohlcv) < 30:
+                return render_template_string(HTML_TEMPLATE, pair=pair, result=None, error="Data perdagangan dari Indodax tidak cukup untuk menghitung indikator.")
+                
             df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             
-            # Hitung Indikator
+            # Perhitungan Indikator Utama
             df['EMA_9'] = ta.ema(df['close'], length=9)
             df['EMA_21'] = ta.ema(df['close'], length=21)
+            
             stoch_rsi = ta.stochrsi(df['close'], length=14, k=3, d=3)
             df['STOCHRSIk'] = stoch_rsi.iloc[:, 0]
             df['STOCHRSId'] = stoch_rsi.iloc[:, 1]
+            
             df['VWAP'] = ta.vwap(df['high'], df['low'], df['close'], df['volume'])
             
-            latest_price = df['close'].iloc[-1]
-            ema9 = df['EMA_9'].iloc[-1]
-            ema21 = df['EMA_21'].iloc[-1]
-            stoch_k = df['STOCHRSIk'].iloc[-1]
-            stoch_d = df['STOCHRSId'].iloc[-1]
-            vwap = df['VWAP'].iloc[-1]
+            # Proteksi jika nilai VWAP atau EMA menghasilkan NaN kosong
+            latest_price = float(df['close'].iloc[-1])
+            ema9 = df['EMA_9'].iloc[-1] if not pd.isna(df['EMA_9'].iloc[-1]) else latest_price
+            ema21 = df['EMA_21'].iloc[-1] if not pd.isna(df['EMA_21'].iloc[-1]) else latest_price
+            stoch_k = df['STOCHRSIk'].iloc[-1] if not pd.isna(df['STOCHRSIk'].iloc[-1]) else 50.0
+            stoch_d = df['STOCHRSId'].iloc[-1] if not pd.isna(df['STOCHRSId'].iloc[-1]) else 50.0
+            vwap = df['VWAP'].iloc[-1] if not pd.isna(df['VWAP'].iloc[-1]) else latest_price
             
-            # Volume via CoinGecko
+            # Pelacakan Volume Koin via CoinGecko
             coin_id = pair.split('/')[0].lower()
             mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
             gecko_id = mapping.get(coin_id, coin_id)
             vol_status = "NORMAL"
             try:
                 url = f"https://api.coingecko.com/api/v3/coins/{gecko_id}"
-                res = requests.get(url).json()
-                if res['market_data']['total_volume']['usd'] > 10000000:
+                res = requests.get(url, timeout=5).json()
+                if 'market_data' in res and res['market_data']['total_volume']['usd'] > 10000000:
                     vol_status = "TINGGI (Akumulasi)"
             except:
                 vol_status = "NORMAL (Data Standar)"
 
-            # Logika Sinyal
-            is_bullish_trend = ema9 > ema21
-            is_oversold = stoch_k < 25 or stoch_d < 25
-            is_good_value = latest_price <= vwap * 1.002
+            # Logika Eksekusi Sinyal
+            is_bullish_trend = float(ema9) > float(ema21)
+            is_oversold = float(stoch_k) < 25.0 or float(stoch_d) < 25.0
+            is_good_value = latest_price <= float(vwap) * 1.002
             
             if is_bullish_trend and is_oversold and is_good_value:
                 signal = "SIAP ENTRY (STRONG BUY)"
-                price_entry = min(latest_price, vwap)
+                price_entry = min(latest_price, float(vwap))
             elif is_bullish_trend and is_good_value:
                 signal = "BOLEH ENTRY (MENCARI PANTULAN)"
                 price_entry = latest_price
@@ -145,7 +151,9 @@ def home():
             price_tp = price_entry * 1.017
             price_sl = price_entry * 0.99
             
-            waktu_sekarang = datetime.now() + timedelta(hours=7)
+            # Penyelarasan Waktu WIB Server secara Aman
+            tz_jkt = pytz.timezone('Asia/Jakarta')
+            waktu_sekarang = datetime.now(tz_jkt)
             
             data_res = {
                 "latest_price": latest_price, "stoch_k": stoch_k, "stoch_d": stoch_d, "vwap": vwap, "vol_status": vol_status,
@@ -156,6 +164,6 @@ def home():
             }
             return render_template_string(HTML_TEMPLATE, pair=pair, result=data_res, waktu=waktu_sekarang.strftime('%d %B %Y, %H:%M'), error=None)
         except Exception as e:
-            return render_template_string(HTML_TEMPLATE, pair=pair, result=None, error=str(e))
+            return render_template_string(HTML_TEMPLATE, pair=pair, result=None, waktu="", error=str(e))
             
-    return render_template_string(HTML_TEMPLATE, pair=pair, result=None, error=None)
+    return render_template_string(HTML_TEMPLATE, pair=pair, result=None, waktu="", error=None)
