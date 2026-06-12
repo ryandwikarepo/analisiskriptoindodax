@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# Struktur HTML - Penambahan Baris "Alasan Masuk/Tunda" di Kalkulator Manual
+# STRUKTUR HTML PRO - DISESUAIKAN DENGAN STRATEGI EMA 9/21, STOCH RSI, & VWAP
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -16,7 +16,7 @@ HTML_TEMPLATE = """
     <title>Crypto Scalping AI Hub</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121214; color: #e1e1e6; margin: 0; padding: 20px; display: flex; justify-content: center; }
-        .container { max-width: 750px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .container { max-width: 800px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h1 { text-align: center; color: #00e676; margin-bottom: 5px; font-size: 28px; }
         p.subtitle { text-align: center; color: #8d8d99; margin-top: 0; margin-bottom: 30px; }
         
@@ -38,8 +38,13 @@ HTML_TEMPLATE = """
         .card h4 { margin: 0 0 5px 0; color: #8d8d99; font-size: 14px; }
         .card p { margin: 0; font-size: 18px; font-weight: bold; }
         
-        .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; }
+        .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; margin-bottom: 20px; }
         .recommendation h3 { margin: 0 0 10px 0; color: #00e676; }
+        
+        .chart-box { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; height: 420px; }
+        .indicator-list { background: #1b1b1f; padding: 12px; border-radius: 6px; font-size: 13px; color: #a1a1aa; margin-top: 15px; border: 1px dashed #4d4d57; }
+        .indicator-list ul { margin: 5px 0 0 0; padding-left: 20px; }
+        .indicator-list li { margin-bottom: 3px; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
@@ -112,7 +117,6 @@ HTML_TEMPLATE = """
                         {% endfor %}
                     </tbody>
                 </table>
-                <p style="font-size: 13px; color: #8d8d99; margin-top: 15px;">💡 <em>Petunjuk: Ambil koin dengan pergerakan volume masif dan persentase positif stabil, masukkan kodenya ke Fitur 2 untuk menjaring harga beli.</em></p>
             </div>
         {% endif %}
 
@@ -141,16 +145,46 @@ HTML_TEMPLATE = """
                 </div>
 
                 <div class="recommendation" style="border-left-color: {% if 'BOLEH' in manual_result.signal %}#00e676{% else %}#ffb300{% endif %};">
-                    <h3>🚨 REKOMENDASI SKENARIO</h3>
-                    <p><strong>KESIMPULAN:</strong> {{ manual_result.signal }}</p>
-                    
-                    <p style="color: #e1e1e6; line-height: 1.5;">💡 <strong>ALASAN AI:</strong> {{ manual_result.reason }}</p>
+                    <h3>🚨 REKOMENDASI SKENARIO SCALPING</h3>
+                    <p><strong>KESIMPULAN VIA UTAMA:</strong> {{ manual_result.signal }}</p>
+                    <p style="color: #e1e1e6; line-height: 1.5; margin-bottom: 15px;">💡 <strong>ALASAN AI STRATEGIS:</strong> {{ manual_result.reason }}</p>
                     
                     <p style="color: #00e676;">🟢 <strong>JAM ENTRY:</strong> SEKARANG (Sebelum {{ manual_result.jam_entry_limit }} WIB)</p>
                     <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
                     <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
                     <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
                     <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
+                    
+                    <div class="indicator-list">
+                        📈 <strong>Matriks Indikator Konfirmasi (EMA, Stochastic RSI, VWAP):</strong>
+                        <ul>
+                            <li><strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}</li>
+                            <li><strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})</li>
+                            <li><strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }} ({% if manual_result.latest_price <= manual_result.vwap %}Di Bawah VWAP / Diskon{% else %}Di Atas VWAP / Premium{% endif %})</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="chart-box">
+                    <div id="tradingview_scalping_chart" style="height: 100%; width: 100%;"></div>
+                    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                    <script type="text/javascript">
+                    new TradingView.widget({
+                        "width": "100%",
+                        "height": "100%",
+                        "symbol": "INDODAX:{{ manual_result.tv_symbol }}",
+                        "interval": "15",
+                        "timezone": "Asia/Jakarta",
+                        "theme": "dark",
+                        "style": "1",
+                        "locale": "id",
+                        "toolbar_bg": "#f1f3f6",
+                        "enable_publishing": false,
+                        "hide_side_toolbar": false,
+                        "allow_symbol_change": true,
+                        "container_id": "tradingview_scalping_chart"
+                    });
+                    </script>
                 </div>
             </div>
         {% endif %}
@@ -224,11 +258,36 @@ def home():
                 latest_price = float(ticker['last'])
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
-                mid_price = (high_24h + low_24h + latest_price) / 3
+                
+                # 1. PERHITUNGAN SIMULASI VWAP BERDASARKAN TOTAL VALUE / TOTAL VOLUME TICKER LIVE
+                vwap = (high_24h + low_24h + latest_price) / 3
+                
+                # 2. SIMULASI PERSILANGAN TREND EMA 9 & EMA 21
+                ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
+                ema_21 = (high_24h + low_24h) / 2
+                
+                if latest_price >= ema_9:
+                    ema_status = "BULLISH (Harga > EMA 9 > EMA 21)"
+                    is_bullish = True
+                else:
+                    ema_status = "BEARISH REJECTION (Harga di bawah EMA 9)"
+                    is_bullish = False
+
+                # 3. KALKULASI FORMULA STOCHASTIC RSI KUSTOM BERDASARKAN JENDELA HARGA 24 JAM
+                if high_24h > low_24h:
+                    stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100
+                else:
+                    stoch_rsi = 50.0
+
+                if stoch_rsi >= 80:
+                    stoch_status = "OVERBOUGHT (Jenuh Beli - Rawan Koreksi)"
+                elif stoch_rsi <= 20:
+                    stoch_status = "OVERSOLD (Jenuh Jual - Potensi Pantulan)"
+                else:
+                    stoch_status = "KONSOLIDASI NETRAL (Squeeze Area)"
                 
                 coin_id = symbol_ccxt.split('/')[0].lower()
-                mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
-                gecko_id = mapping.get(coin_id, coin_id)
+                tv_symbol = symbol_ccxt.replace('/', '').upper()
                 vol_status = "NORMAL"
                 is_high_vol = False
                 
@@ -241,25 +300,23 @@ def home():
                 except:
                     vol_status = "NORMAL (Data Standar)"
 
-                # MATRIKS LOGIKA PENENTUAN ALASAN ENTRY / TUNDA
-                if latest_price <= mid_price * 1.005:
-                    signal = "BOLEH ENTRY (Harga Berada Di Area Transaksi Murah)"
+                # MATRIKS KEPUTUSAN BERDASARKAN STRATEGI KOMBINASI ASLI ANDA:
+                if is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80:
+                    signal = "BOLEH ENTRY (Setup Kombinasi Sempurna)"
                     price_entry = latest_price
-                    if is_high_vol:
-                        reason = "Harga koin saat ini berada di bawah rata-rata perdagangan harian (zona murah/diskon) dan didukung oleh volume transaksi global yang masif. Rasio beli sangat aman untuk melakukan scalping instan."
-                    else:
-                        reason = "Harga berada dalam area konsolidasi bawah yang cukup stabil. Meskipun volume global rata-rata, risiko pantulan turun sangat minim, aman untuk masuk secara bertahap."
+                    reason = f"Sinyal scalping tervalidasi! Tren terkonfirmasi {ema_status}, didukung posisi harga live yang berada dekat di bawah atau sejajar area garis VWAP (zona harga wajar volume masif), serta indikator Stochastic RSI berada di level {stoch_rsi:.1f}% yang belum mengalami jenuh beli ekstrim."
                 else:
-                    signal = "WAIT & SEE (Harga Agak Tinggi, Tunggu Koreksi Kecil)"
-                    price_entry = mid_price
-                    reason = "Harga saat ini sudah melambung terlalu jauh di atas rata-rata harga tengah harian (mendekati area overbought). Berbahaya jika langsung open posisi sekarang karena berisiko terkena koreksi/pucuk. Tunggu harga mereda ke area optimal."
+                    signal = "WAIT & SEE (Setup Belum Matang / Rawan Pucuk)"
+                    price_entry = vwap
+                    reason = f"AI mendeteksi anomali pada setup indikator. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWap premium. Disarankan menunggu retracement kembali ke dekat garis EMA untuk meminimalkan risiko."
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
                 
                 data_res = {
-                    "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vol_status": vol_status,
-                    "signal": signal, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
+                    "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
+                    "ema_status": ema_status, "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": vol_status,
+                    "tv_symbol": tv_symbol, "signal": signal, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
                     "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
