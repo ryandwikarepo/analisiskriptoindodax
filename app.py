@@ -6,7 +6,7 @@ import pytz
 app = Flask(__name__)
 
 # ==============================================================================
-# TEMPLATE HTML: ADVANCED MATRIX VALIDATOR TERMINAL
+# TEMPLATE HTML: CLEAN LAYOUT TERMINAL (MATRIKS DI ATAS JAM ENTRY)
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -45,17 +45,14 @@ HTML_TEMPLATE = """
         
         .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; }
         
-        /* Modifikasi Elemen Matriks Indikator */
-        .indicator-list { background: #1b1b1f; padding: 20px; border-radius: 8px; font-size: 14px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
+        /* Elemen Matriks Indikator Terbersih */
+        .indicator-list { background: #1b1b1f; padding: 18px; border-radius: 8px; font-size: 14px; color: #a1a1aa; margin-top: 15px; margin-bottom: 20px; border: 1px solid #4d4d57; }
         .indicator-list ul { margin: 10px 0 0 0; padding-left: 0; list-style: none; }
-        .indicator-list li { margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid #29292e; }
+        .indicator-list li { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #29292e; }
         .indicator-list li:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
         
-        .indicator-header { display: flex; align-items: center; justify-content: space-between; font-weight: bold; }
-        .indicator-rule { font-size: 12px; color: #71717a; margin-top: 4px; display: block; font-style: italic; }
-        
-        .stoch-gauge-container { width: 120px; height: 10px; background-color: #4d4d57; border-radius: 5px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 10px; position: relative; border: 1px solid #29292e;}
-        .stoch-gauge-fill { height: 100%; position: absolute; top: 0; left: 0; transition: width 0.3s ease; }
+        .indicator-header { display: flex; align-items: center; font-weight: bold; }
+        .indicator-rule { font-size: 12px; color: #71717a; margin-top: 5px; display: block; font-style: italic; line-height: 1.4; }
         
         table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #121214; border-radius: 8px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #29292e; }
@@ -172,16 +169,6 @@ HTML_TEMPLATE = """
                     </p>
                     <p style="color: #e1e1e6; line-height: 1.5; margin-bottom: 15px;">💡 <strong>ALASAN AI:</strong> {{ manual_result.reason }}</p>
                     
-                    <p>
-                        <strong style="color: {{ manual_result.entry_color }};">🟢 JAM ENTRY:</strong> 
-                        <span style="color: {{ manual_result.entry_color }}; font-weight: bold;">{{ manual_result.entry_status_text }}</span>
-                    </p>
-                    
-                    <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
-                    <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
-                    <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
-                    <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
-                    
                     <div class="indicator-list">
                         📋 <strong>Matriks Indikator Konfirmasi Analisis Teknikal:</strong>
                         <ul>
@@ -190,9 +177,6 @@ HTML_TEMPLATE = """
                                     <span>
                                         {% if manual_result.is_bullish %}✅{% else %}❌{% endif %} 
                                         <strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}
-                                    </span>
-                                    <span style="color: {% if manual_result.is_bullish %}#00e676{% else %}#ff4d4d{% endif %};">
-                                        {% if manual_result.is_bullish %}Bullish Structure{% else %}Bearish Rejection{% endif %}
                                     </span>
                                 </div>
                                 <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9 (Tren Naik). Jika di bawah EMA 9, harga rawan jatuh terseret longsor ke bawah.</span>
@@ -204,9 +188,6 @@ HTML_TEMPLATE = """
                                         {% if manual_result.stoch_rsi < 80 %}✅{% else %}❌{% endif %}
                                         <strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})
                                     </span>
-                                    <div class="stoch-gauge-container">
-                                        <div class="stoch-gauge-fill" style="width: {{ manual_result.stoch_rsi }}%; background-color: {% if manual_result.stoch_rsi >= 80 %}#ff4d4d{% elif manual_result.stoch_rsi <= 20 %}#00e676{% else %}#ffb300{% endif %};"></div>
-                                    </div>
                                 </div>
                                 <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80% (Aman/Oversold/Squeeze). Jika di atas 80% (Overbought), pasar sudah terlalu jenuh beli dan rawan aksi ambil untung massal (Dump).</span>
                             </li>
@@ -223,6 +204,16 @@ HTML_TEMPLATE = """
                             </li>
                         </ul>
                     </div>
+
+                    <p>
+                        <strong style="color: {{ manual_result.entry_color }};">🟢 JAM ENTRY:</strong> 
+                        <span style="color: {{ manual_result.entry_color }}; font-weight: bold;">{{ manual_result.entry_status_text }}</span>
+                    </p>
+                    
+                    <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
+                    <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
+                    <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
+                    <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
                 </div>
             </div>
 
@@ -440,7 +431,6 @@ def home():
                 elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
                 else: stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
-                # Aturan utama masuk pasar
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
                 if is_ready:
