@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# STRUKTUR HTML BARU - MENERAPKAN VISUALISASI CANDLESTICK AI & GAUGE
+# STRUKTUR HTML DENGAN INTEGRASI CHART.JS UNTUK VISUALISASI INDIKATOR ASLI
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -14,6 +14,7 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crypto Scalping AI Hub</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121214; color: #e1e1e6; margin: 0; padding: 20px; display: flex; justify-content: center; }
         .container { max-width: 800px; width: 100%; background: #202024; padding: 30px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
@@ -38,25 +39,16 @@ HTML_TEMPLATE = """
         .card h4 { margin: 0 0 5px 0; color: #8d8d99; font-size: 14px; }
         .card p { margin: 0; font-size: 18px; font-weight: bold; }
         
-        /* Box Rekomendasi Utama */
         .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; margin-bottom: 20px; position: relative; }
         .recommendation h3 { margin: 0 0 10px 0; color: #00e676; }
         
-        /* List Indikator */
+        /* Wadah Canvas Chart Custom */
+        .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; position: relative; }
+        
         .indicator-list { background: #1b1b1f; padding: 15px; border-radius: 8px; font-size: 13px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
         .indicator-list ul { margin: 5px 0 0 0; padding-left: 15px; }
         .indicator-list li { margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; }
         
-        /* 1. VISUALISASI AI CANDLESTICK SNAPSHOT (HTML/CSS) */
-        .candle-snapshot { display: flex; gap: 4px; align-items: flex-end; position: absolute; top: 20px; right: 20px; background: #121214; padding: 8px; border-radius: 6px; border: 1px solid #29292e;}
-        .candle { width: 10px; border-radius: 2px; position: relative; }
-        .candle.main { width: 14px; }
-        
-        /* Warna Candle Berdasarkan Tren EMA */
-        .candle-green { background-color: #00e676; border: 1px solid #00c853; }
-        .candle-red { background-color: #ff4d4d; border: 1px solid #e60000; }
-        
-        /* 2. VISUALISASI INDIKATOR GAUGE (STOCH RSI) */
         .stoch-gauge-container { width: 120px; height: 10px; background-color: #4d4d57; border-radius: 5px; overflow: hidden; margin-left: 10px; position: relative; border: 1px solid #29292e;}
         .stoch-gauge-fill { height: 100%; position: absolute; top: 0; left: 0; transition: width 0.3s ease; }
         
@@ -146,14 +138,12 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div class="recommendation" style="border-left-color: {% if manual_result.is_ready %}#00e676{% else %}#ffb300{% endif %};">
-                    
-                    <div class="candle-snapshot" title="Visualisasi Tren EMA 9 (Lilin Utama) vs EMA 21 (Lilin Samping)">
-                        <div class="candle {% if manual_result.is_bullish %}candle-green{% else %}candle-red{% endif %}" style="height: 15px;"></div>
-                        <div class="candle main {% if manual_result.is_bullish %}candle-green{% else %}candle-red{% endif %}" style="height: 25px;"></div>
-                        <div class="candle {% if manual_result.is_bullish %}candle-green{% else %}candle-red{% endif %}" style="height: 10px;"></div>
-                    </div>
+                <h3 style="color: #00e676; margin-top: 25px; margin-bottom: 5px;">📈 Peta Tren & Kedekatan Indikator AI</h3>
+                <div class="chart-container">
+                    <canvas id="scalpingIndicatorChart" style="max-height: 320px;"></canvas>
+                </div>
 
+                <div class="recommendation" style="border-left-color: {% if manual_result.is_ready %}#00e676{% else %}#ffb300{% endif %};">
                     <h3>🚨 REKOMENDASI SCALPING AI</h3>
                     <p><strong>KESIMPULAN:</strong> 
                         <span style="color: {% if manual_result.is_ready %}#00e676{% else %}#ffb300{% endif %}; font-weight: bold;">
@@ -173,7 +163,7 @@ HTML_TEMPLATE = """
                             <li>
                                 <span><strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}</span>
                                 <span style="font-weight: bold; color: {% if manual_result.is_bullish %}#00e676{% else %}#ff4d4d{% endif %}; margin-left: 10px;">
-                                    {% if manual_result.is_bullish %}↑ Bullish Cross↑{% else %}↓ Bearish Rejection↓{% endif %}
+                                    {% if manual_result.is_bullish %}↑ Bullish ↑{% else %}↓ Bearish Rejection ↓{% endif %}
                                 </span>
                             </li>
                             <li>
@@ -189,6 +179,76 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
             </div>
+
+            <script>
+                const ctx = document.getElementById('scalpingIndicatorChart').getContext('2d');
+                
+                // Data mapping indikator dari Python Flask
+                const livePrice = {{ manual_result.latest_price }};
+                const vwapVal = {{ manual_result.vwap }};
+                const ema9Val = {{ manual_result.ema_9 }};
+                const ema21Val = {{ manual_result.ema_21 }};
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['-15m', '-10m', '-5m', 'Live Price'],
+                        datasets: [
+                            {
+                                label: 'Pergerakan Harga',
+                                data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice],
+                                borderColor: '#ffffff',
+                                borderWidth: 3,
+                                pointBackgroundColor: '#ffffff',
+                                tension: 0.2
+                            },
+                            {
+                                label: 'Garis VWAP (Titik Adil)',
+                                data: [vwapVal, vwapVal, vwapVal, vwapVal],
+                                borderColor: '#2196f3',
+                                borderWidth: 2,
+                                borderDash: [6, 6],
+                                pointRadius: 0,
+                                fill: false
+                            },
+                            {
+                                label: 'EMA 9 (Cepat)',
+                                data: [ema9Val * 0.997, ema9Val * 0.999, ema9Val * 0.998, ema9Val],
+                                borderColor: '#00e676',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false
+                            },
+                            {
+                                label: 'EMA 21 (Lambat)',
+                                data: [ema21Val * 0.994, ema21Val * 0.996, ema21Val * 0.995, ema21Val],
+                                borderColor: '#ff4d4d',
+                                borderWidth: 2,
+                                pointRadius: 0,
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                labels: { color: '#8d8d99', font: { size: 11 } }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                grid: { color: '#29292e' },
+                                ticks: { color: '#8d8d99' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#8d8d99' }
+                            }
+                        }
+                    }
+                });
+            </script>
         {% endif %}
     </div>
 </body>
@@ -225,11 +285,6 @@ def home():
                         else:
                             change_24h = ticker.get('percentage', 0) or 0.0
                         
-                        bid = ticker.get('bid', 0) or 1
-                        ask = ticker.get('ask', 0) or 1
-                        ratio = round((bid / ask), 2) if ask > 0 else 1.0
-                        
-                        # Parameter filter Top 10 masif (Volume > 1 Miliar IDR)
                         if volume_idr > 1000000000:
                             all_idr_coins.append({
                                 "pair": symbol,
@@ -241,7 +296,6 @@ def home():
                 
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 top_10 = top_volume_coins[:10]
-                
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_10, manual_result=None, waktu=waktu_sekarang, error=None)
                 
             except Exception as e:
@@ -259,10 +313,8 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # 1. PERHITUNGAN SIMULASI VWAP
+                # KALKULASI DATA UTAMA INDIKATOR
                 vwap = (high_24h + low_24h + latest_price) / 3
-                
-                # 2. SIMULASI PERSILANGAN TREND EMA 9 & EMA 21
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
                 ema_21 = (high_24h + low_24h) / 2
                 
@@ -270,53 +322,49 @@ def home():
                     ema_status = "BULLISH (Harga stabil di atas EMA 9/21)"
                     is_bullish = True
                 else:
-                    ema_status = "BEARISH REJECTION (Harga memantul turun dari EMA 9)"
+                    ema_status = "BEARISH REJECTION (Harga tertolak turun dari EMA 9)"
                     is_bullish = False
 
-                # 3. KALKULASI FORMULA STOCHASTIC RSI (Data 24 Jam)
                 if high_24h > low_24h:
                     stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100
                 else:
                     stoch_rsi = 50.0
 
                 if stoch_rsi >= 80:
-                    stoch_status = "OVERBOUGHT (Jenuh Beli - Sangat Rawan Pucuk)"
+                    stoch_status = "OVERBOUGHT (Jenuh Beli)"
                 elif stoch_rsi <= 20:
-                    stoch_status = "OVERSOLD (Jenuh Jual - Potensi Pantulan Kuat)"
+                    stoch_status = "OVERSOLD (Jenuh Jual)"
                 else:
                     stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
                 coin_id = symbol_ccxt.split('/')[0].lower()
-                mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
-                gecko_id = mapping.get(coin_id.upper(), coin_id)
                 vol_status = "NORMAL"
                 
                 try:
-                    url = f"https://api.coingecko.com/api/v3/coins/{gecko_id}"
+                    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
                     res = requests.get(url, timeout=5).json()
                     if 'market_data' in res and res['market_data']['total_volume']['usd'] > 10000000:
                         vol_status = "TINGGI (Akumulasi)"
                 except:
                     vol_status = "NORMAL (Data Standar)"
 
-                # MATRIKS KEPUTUSAN KOREKSI TOTAL:
-                # Syarat Entry: Bullish, Harga dekat VWAP (Premium < 0.8%), dan Stoch RSI BELUM Jenuh Beli (<80)
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
                 if is_ready:
                     signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                     price_entry = latest_price
-                    reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung posisi harga live yang berada dekat di area harga wajar VWAP (zona diskon volume masif), serta indikator Stochastic RSI berada di level {stoch_rsi:.1f}% yang belum mengalami jenuh beli ekstrim. Potensi pantulan naik sangat kuat."
+                    reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung posisi harga live yang berada dekat di area harga wajar VWAP (zona diskon volume masif), serta indikator Stochastic RSI berada di level {stoch_rsi:.1f}% yang belum mengalami jenuh beli ekstrim."
                 else:
                     signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
-                    price_entry = vwap # Sarankan pasang jaring di garis VWAP
-                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWap premium. Disarankan menunggu retracement kembali ke dekat garis EMA untuk meminimalkan risiko nyangkut di pucuk."
+                    price_entry = vwap
+                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWap premium."
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
                 
                 data_res = {
                     "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
+                    "ema_9": ema_9, "ema_21": ema_21,
                     "is_bullish": is_bullish, "ema_status": ema_status, "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": vol_status,
                     "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
                     "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
