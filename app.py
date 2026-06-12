@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# Struktur HTML Bersih Tanpa Kolom Waktu Entry - Diperluas ke TOP 10 KOIN
+# Struktur HTML - Penambahan Baris "Alasan Masuk/Tunda" di Kalkulator Manual
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -140,12 +140,15 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <div class="recommendation" style="border-left-color: #00e676;">
+                <div class="recommendation" style="border-left-color: {% if 'BOLEH' in manual_result.signal %}#00e676{% else %}#ffb300{% endif %};">
                     <h3>🚨 REKOMENDASI SKENARIO</h3>
                     <p><strong>KESIMPULAN:</strong> {{ manual_result.signal }}</p>
+                    
+                    <p style="color: #e1e1e6; line-height: 1.5;">💡 <strong>ALASAN AI:</strong> {{ manual_result.reason }}</p>
+                    
                     <p style="color: #00e676;">🟢 <strong>JAM ENTRY:</strong> SEKARANG (Sebelum {{ manual_result.jam_entry_limit }} WIB)</p>
                     <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
-                    <p style="color: #f74040;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
+                    <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
                     <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
                     <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
                 </div>
@@ -202,7 +205,6 @@ def home():
                             "is_ideal": is_ideal
                         })
                 
-                # URUTKAN BERDASARKAN VOLUME DAN AMBIL 10 KOIN TERBANYAK
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 top_10 = top_volume_coins[:10]
                 
@@ -228,27 +230,36 @@ def home():
                 mapping = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"}
                 gecko_id = mapping.get(coin_id, coin_id)
                 vol_status = "NORMAL"
+                is_high_vol = False
+                
                 try:
                     url = f"https://api.coingecko.com/api/v3/coins/{gecko_id}"
                     res = requests.get(url, timeout=5).json()
                     if 'market_data' in res and res['market_data']['total_volume']['usd'] > 10000000:
                         vol_status = "TINGGI (Akumulasi)"
+                        is_high_vol = True
                 except:
                     vol_status = "NORMAL (Data Standar)"
 
+                # MATRIKS LOGIKA PENENTUAN ALASAN ENTRY / TUNDA
                 if latest_price <= mid_price * 1.005:
                     signal = "BOLEH ENTRY (Harga Berada Di Area Transaksi Murah)"
                     price_entry = latest_price
+                    if is_high_vol:
+                        reason = "Harga koin saat ini berada di bawah rata-rata perdagangan harian (zona murah/diskon) dan didukung oleh volume transaksi global yang masif. Rasio beli sangat aman untuk melakukan scalping instan."
+                    else:
+                        reason = "Harga berada dalam area konsolidasi bawah yang cukup stabil. Meskipun volume global rata-rata, risiko pantulan turun sangat minim, aman untuk masuk secara bertahap."
                 else:
                     signal = "WAIT & SEE (Harga Agak Tinggi, Tunggu Koreksi Kecil)"
                     price_entry = mid_price
+                    reason = "Harga saat ini sudah melambung terlalu jauh di atas rata-rata harga tengah harian (mendekati area overbought). Berbahaya jika langsung open posisi sekarang karena berisiko terkena koreksi/pucuk. Tunggu harga mereda ke area optimal."
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
                 
                 data_res = {
                     "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vol_status": vol_status,
-                    "signal": signal, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
+                    "signal": signal, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
                     "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
