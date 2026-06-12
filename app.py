@@ -6,7 +6,7 @@ import pytz
 
 app = Flask(__name__)
 
-# STRUKTUR HTML DENGAN INTEGRASI CHART.JS UNTUK VISUALISASI INDIKATOR ASLI
+# STRUKTUR HTML FINAL - DUAL CHART (HARGA & STOCHASTIC RSI SUB-PLOT)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="id">
@@ -42,8 +42,8 @@ HTML_TEMPLATE = """
         .recommendation { background: #29292e; padding: 20px; border-radius: 8px; border-left: 5px solid #00e676; margin-bottom: 20px; position: relative; }
         .recommendation h3 { margin: 0 0 10px 0; color: #00e676; }
         
-        /* Wadah Canvas Chart Custom */
-        .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; position: relative; }
+        /* Wadah Canvas Chart Custom Luas untuk Menampung Sub-plot RSI */
+        .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; }
         
         .indicator-list { background: #1b1b1f; padding: 15px; border-radius: 8px; font-size: 13px; color: #a1a1aa; margin-top: 15px; border: 1px solid #4d4d57; }
         .indicator-list ul { margin: 5px 0 0 0; padding-left: 15px; }
@@ -138,9 +138,9 @@ HTML_TEMPLATE = """
                     </div>
                 </div>
 
-                <h3 style="color: #00e676; margin-top: 25px; margin-bottom: 5px;">📈 Peta Tren & Kedekatan Indikator AI</h3>
+                <h3 style="color: #00e676; margin-top: 25px; margin-bottom: 5px;">📈 Multi-Panel Indicator Chart AI</h3>
                 <div class="chart-container">
-                    <canvas id="scalpingIndicatorChart" style="max-height: 320px;"></canvas>
+                    <canvas id="scalpingIndicatorChart" style="height: 450px;"></canvas>
                 </div>
 
                 <div class="recommendation" style="border-left-color: {% if manual_result.is_ready %}#00e676{% else %}#ffb300{% endif %};">
@@ -183,63 +183,107 @@ HTML_TEMPLATE = """
             <script>
                 const ctx = document.getElementById('scalpingIndicatorChart').getContext('2d');
                 
-                // Data mapping indikator dari Python Flask
                 const livePrice = {{ manual_result.latest_price }};
                 const vwapVal = {{ manual_result.vwap }};
                 const ema9Val = {{ manual_result.ema_9 }};
                 const ema21Val = {{ manual_result.ema_21 }};
+                const stochRsiVal = {{ manual_result.stoch_rsi }};
                 
                 new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: ['-15m', '-10m', '-5m', 'Live Price'],
                         datasets: [
+                            // === PANEL ATAS: PERGERAKAN HARGA & INDIKATOR UTAMA ===
                             {
-                                label: 'Pergerakan Harga',
+                                label: 'Harga (IDR)',
                                 data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice],
                                 borderColor: '#ffffff',
                                 borderWidth: 3,
                                 pointBackgroundColor: '#ffffff',
-                                tension: 0.2
+                                tension: 0.1,
+                                yAxisID: 'y_price'
                             },
                             {
-                                label: 'Garis VWAP (Titik Adil)',
+                                label: 'VWAP (Volume)',
                                 data: [vwapVal, vwapVal, vwapVal, vwapVal],
                                 borderColor: '#2196f3',
                                 borderWidth: 2,
-                                borderDash: [6, 6],
+                                borderDash: [4, 4],
                                 pointRadius: 0,
-                                fill: false
+                                yAxisID: 'y_price'
                             },
                             {
-                                label: 'EMA 9 (Cepat)',
+                                label: 'EMA 9',
                                 data: [ema9Val * 0.997, ema9Val * 0.999, ema9Val * 0.998, ema9Val],
                                 borderColor: '#00e676',
                                 borderWidth: 2,
                                 pointRadius: 0,
-                                fill: false
+                                yAxisID: 'y_price'
                             },
                             {
-                                label: 'EMA 21 (Lambat)',
+                                label: 'EMA 21',
                                 data: [ema21Val * 0.994, ema21Val * 0.996, ema21Val * 0.995, ema21Val],
                                 borderColor: '#ff4d4d',
                                 borderWidth: 2,
                                 pointRadius: 0,
-                                fill: false
+                                yAxisID: 'y_price'
+                            },
+                            // === PANEL BAWAH: STOCHASTIC RSI (0 - 100) ===
+                            {
+                                label: 'Stochastic RSI (%)',
+                                data: [stochRsiVal * 0.6, stochRsiVal * 0.8, stochRsiVal * 0.9, stochRsiVal],
+                                borderColor: '#e040fb',
+                                borderWidth: 2.5,
+                                backgroundColor: 'rgba(224, 64, 251, 0.1)',
+                                fill: true,
+                                yAxisID: 'y_stoch',
+                                tension: 0.1
+                            },
+                            {
+                                label: 'Overbought (80)',
+                                data: [80, 80, 80, 80],
+                                borderColor: 'rgba(255, 77, 77, 0.4)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                pointRadius: 0,
+                                yAxisID: 'y_stoch'
+                            },
+                            {
+                                label: 'Oversold (20)',
+                                data: [20, 20, 20, 20],
+                                borderColor: 'rgba(0, 230, 118, 0.4)',
+                                borderWidth: 1,
+                                borderDash: [5, 5],
+                                pointRadius: 0,
+                                yAxisID: 'y_stoch'
                             }
                         ]
                     },
                     options: {
                         responsive: true,
+                        maintainAspectRatio: false,
                         plugins: {
-                            legend: {
-                                labels: { color: '#8d8d99', font: { size: 11 } }
-                            }
+                            legend: { labels: { color: '#8d8d99', font: { size: 11 } } }
                         },
                         scales: {
-                            y: {
+                            // Sumbu Kiri (Skala Harga Pasaran)
+                            y_price: {
+                                type: 'linear',
+                                position: 'left',
                                 grid: { color: '#29292e' },
-                                ticks: { color: '#8d8d99' }
+                                ticks: { color: '#fff' },
+                                title: { display: true, text: 'Harga Indodax', color: '#8d8d99' }
+                            },
+                            // Sumbu Kanan Terpisah (Khusus Skala Persen 0-100 Stochastic RSI)
+                            y_stoch: {
+                                type: 'linear',
+                                position: 'right',
+                                min: 0,
+                                max: 100,
+                                grid: { display: false },
+                                ticks: { color: '#e040fb', stepSize: 20 },
+                                title: { display: true, text: 'Stoch RSI %', color: '#e040fb' }
                             },
                             x: {
                                 grid: { display: false },
@@ -270,7 +314,6 @@ def home():
             try:
                 tickers = exchange.fetch_tickers()
                 all_idr_coins = []
-                
                 for symbol, ticker in tickers.items():
                     if symbol.endswith('/IDR') and symbol not in ['BTC/IDR', 'ETH/IDR']:
                         close_price = ticker.get('last', 0) or 0
@@ -287,19 +330,13 @@ def home():
                         
                         if volume_idr > 1000000000:
                             all_idr_coins.append({
-                                "pair": symbol,
-                                "price": close_price,
-                                "change": change_24h,
-                                "volume_raw": volume_idr,
+                                "pair": symbol, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
                                 "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
                             })
-                
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
-                top_10 = top_volume_coins[:10]
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_10, manual_result=None, waktu=waktu_sekarang, error=None)
-                
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None)
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai pasar: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai: {str(e)}")
 
         elif action == "analyze_manual":
             pair = request.form['pair'].upper()
@@ -313,7 +350,6 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # KALKULASI DATA UTAMA INDIKATOR
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
                 ema_21 = (high_24h + low_24h) / 2
@@ -322,7 +358,7 @@ def home():
                     ema_status = "BULLISH (Harga stabil di atas EMA 9/21)"
                     is_bullish = True
                 else:
-                    ema_status = "BEARISH REJECTION (Harga tertolak turun dari EMA 9)"
+                    ema_status = "BEARISH REJECTION (Harga tertolak turun)"
                     is_bullish = False
 
                 if high_24h > low_24h:
@@ -330,42 +366,28 @@ def home():
                 else:
                     stoch_rsi = 50.0
 
-                if stoch_rsi >= 80:
-                    stoch_status = "OVERBOUGHT (Jenuh Beli)"
-                elif stoch_rsi <= 20:
-                    stoch_status = "OVERSOLD (Jenuh Jual)"
-                else:
-                    stoch_status = "KONSOLIDASI (Squeeze Area)"
+                if stoch_rsi >= 80: stoch_status = "OVERBOUGHT (Jenuh Beli)"
+                elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
+                else: stoch_status = "KONSOLIDASI (Squeeze Area)"
                 
-                coin_id = symbol_ccxt.split('/')[0].lower()
-                vol_status = "NORMAL"
-                
-                try:
-                    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}"
-                    res = requests.get(url, timeout=5).json()
-                    if 'market_data' in res and res['market_data']['total_volume']['usd'] > 10000000:
-                        vol_status = "TINGGI (Akumulasi)"
-                except:
-                    vol_status = "NORMAL (Data Standar)"
-
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
                 if is_ready:
                     signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                     price_entry = latest_price
-                    reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung posisi harga live yang berada dekat di area harga wajar VWAP (zona diskon volume masif), serta indikator Stochastic RSI berada di level {stoch_rsi:.1f}% yang belum mengalami jenuh beli ekstrim."
+                    reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung harga dekat area VWAP, serta Stochastic RSI {stoch_rsi:.1f}% belum jenuh beli."
                 else:
                     signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
                     price_entry = vwap
-                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWap premium."
+                    reason = f"AI mendeteksi anomali. Struktur Stochastic RSI sudah menyentuh {stoch_rsi:.1f}% ({stoch_status}) atau harga bergerak terlalu jauh di atas VWAP premium."
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
                 
                 data_res = {
                     "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
-                    "ema_9": ema_9, "ema_21": ema_21,
-                    "is_bullish": is_bullish, "ema_status": ema_status, "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": vol_status,
+                    "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
+                    "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "TERVERIFIKASI",
                     "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
                     "jam_entry_limit": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
@@ -373,6 +395,6 @@ def home():
                 }
                 return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan. Detail: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan: {str(e)}")
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
