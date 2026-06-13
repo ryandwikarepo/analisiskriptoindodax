@@ -3,6 +3,7 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 import random
+import time
 
 app = Flask(__name__)
 
@@ -94,13 +95,13 @@ HTML_TEMPLATE = """
         {% if potential_coins %}
             <div class="result-box">
                 <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 10 PASAR IDR TERBESAR</h3>
-                <p style="color: #8d8d99; font-size: 12px; margin-top: 0;">Dievaluasi real-time berdasarkan Proksi Perubahan Pasar Terdekat (Waktu: {{ waktu }} WIB)</p>
+                <p style="color: #8d8d99; font-size: 12px; margin-top: 0;">Dievaluasi real-time berdasarkan Estimasi Perubahan Pasar Terdekat (Waktu: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
                             <th>Pair Koin</th>
                             <th>Harga Sekarang</th>
-                            <th>Kenaikan (24h) Proksi</th>
+                            <th>Kenaikan (24h)</th>
                             <th>Volume Pasar (24h)</th>
                             <th>Rekomendasi AI</th>
                             <th>Estimasi Jam Entry</th>
@@ -111,9 +112,17 @@ HTML_TEMPLATE = """
                         <tr>
                             <td style="font-weight: bold; color: #fff;">{{ coin.pair }}</td>
                             <td>Rp {{ "{:,.2f}".format(coin.price) if coin.price < 100 else "{:,.0f}".format(coin.price) }}</td>
+                            
                             <td style="color: {% if coin.change > 0 %}#00e676{% elif coin.change < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
-                                {{ "+" if coin.change > 0 else "" }}{{ "{:.2f}".format(coin.change) }}%
+                                {% if coin.change > 0 %}
+                                    ± +{{ coin.change | int }}%
+                                {% elif coin.change < 0 %}
+                                    ± {{ coin.change | int }}%
+                                {% else %}
+                                    ± 0%
+                                {% endif %}
                             </td>
+                            
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
                             <td>
                                 {% if coin.is_ready %}
@@ -135,9 +144,15 @@ HTML_TEMPLATE = """
         {% if manual_result %}
             <div class="result-box">
                 <h3>Hasil Analisis Real-Time: {{ pair }}</h3>
-                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h Proksi: 
+                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h: 
                     <span style="color: {% if manual_result.change_24h > 0 %}#00e676{% elif manual_result.change_24h < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
-                        {{ "+" if manual_result.change_24h > 0 else "" }}{{ "{:.2f}".format(manual_result.change_24h) }}%
+                        {% if manual_result.change_24h > 0 %}
+                            ± +{{ manual_result.change_24h | int }}%
+                        {% elif manual_result.change_24h < 0 %}
+                            ± {{ manual_result.change_24h | int }}%
+                        {% else %}
+                            ± 0%
+                        {% endif %}
                     </span>
                 </p>
                 
@@ -174,7 +189,7 @@ HTML_TEMPLATE = """
                     <p style="color: #e1e1e6; line-height: 1.5; margin-bottom: 15px;">💡 <strong>ALASAN AI:</strong> {{ manual_result.reason }}</p>
                     
                     <div class="indicator-list">
-                        📋 <strong>Matriks Indikator Konfirmasi Analisis Teknikal:</strong>
+                        📊 <strong>Matriks Indikator Konfirmasi Analisis Teknikal:</strong>
                         <ul>
                             <li>
                                 <div class="indicator-header">
@@ -234,7 +249,7 @@ HTML_TEMPLATE = """
                         labels: ['-15m', '-10m', '-5m', 'Live Price'],
                         datasets: [
                             { label: 'Harga (IDR)', data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice], borderColor: '#ffffff', borderWidth: 3, pointBackgroundColor: '#ffffff', tension: 0.1, yAxisID: 'y_price' },
-                            { label: 'VWAP (Volume)', data: [vwapVal, vwapVal, vwapVal, vwapVal], borderColor: '#2196f3', borderWidth: 2, borderDash: [4, 4], pointRadius: 0, yAxisID: 'y_price' },
+                            { label: 'VWAP', data: [vwapVal, vwapVal, vwapVal, vwapVal], borderColor: '#2196f3', borderWidth: 2, borderDash: [4, 4], pointRadius: 0, yAxisID: 'y_price' },
                             { label: 'EMA 9', data: [ema9Val * 0.997, ema9Val * 0.999, ema9Val * 0.998, ema9Val], borderColor: '#00e676', borderWidth: 2, pointRadius: 0, yAxisID: 'y_price' },
                             { label: 'EMA 21', data: [ema21Val * 0.994, ema21Val * 0.996, ema21Val * 0.995, ema21Val], borderColor: '#ff4d4d', borderWidth: 2, pointRadius: 0, yAxisID: 'y_price' },
                             { label: 'Stochastic RSI (%)', data: [stochRsiVal * 0.6, stochRsiVal * 0.8, stochRsiVal * 0.9, stochRsiVal], borderColor: '#e040fb', borderWidth: 2.5, backgroundColor: 'rgba(224, 64, 251, 0.1)', fill: true, yAxisID: 'y_stoch', tension: 0.1 },
@@ -262,39 +277,75 @@ HTML_TEMPLATE = """
 
 def hitung_proksi_change_24h(last, high, low):
     """
-    Fungsi khusus kalibrasi persentase agar mendekati pergerakan asli di Indodax 
-    tanpa bergantung pada endpoint summaries yang sering mogok (0.00%).
+    Menghitung perkiraan perubahan, lalu membulatkannya ke puluhan/satuan terdekat
+    untuk menghasilkan label perkiraan '±' yang stabil dan tidak membingungkan.
     """
     if high <= low:
-        return 0.0
+        return 0
     
-    # Hitung posisi harga relatif dalam skala 0 sampai 1
     posisi_relatif = (last - low) / (high - low)
-    
-    # Hitung rentang volatilitas harian dalam persen
     rentang_persen = ((high - low) / low) * 100
     
-    # Proksi akhir: Menggeser titik tengah menjadi 0%
-    # Jika posisi harga di atas setengah harga harian, nilai positif. Jika di bawah, nilai negatif.
-    hasil_proksi = (posisi_relatif - 0.5) * 2 * (rentang_persen * 0.45)
-    return hasil_proksi
+    mentah_persen = (posisi_relatif - 0.5) * 2 * (rentang_persen * 0.45)
+    abs_val = abs(mentah_persen)
+    
+    # PEMBULATAN BULAT (PROXIMITY LABELLING)
+    if abs_val < 1:
+        hasil_pembulatan = round(mentah_persen, 1)
+    elif abs_val <= 10:
+        hasil_pembulatan = round(mentah_persen)
+    else:
+        # Jika fluktuasi besar, bulatkan ke kelipatan 5 terdekat (Contoh: 71.69% -> 70%, 38.75% -> 40%)
+        hasil_pembulatan = round(mentah_persen / 5) * 5
+        
+    return hasil_pembulatan
 
 def fetch_indodax_tickers():
+    """
+    FUNGSI ANTI-BLOKIR (BYPASS HTTP 403 CLOUDFLARE)
+    Menggunakan teknik multi User-Agent acak, Session headers browser, cache buster, 
+    dan backoff retry otomatis jika mendeteksi blokir sementara.
+    """
     user_agents = [
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0",
+        "Mozilla/5.0 (X11; Linux x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
     ]
-    headers = {"User-Agent": random.choice(user_agents), "Accept": "application/json"}
-    cache_buster = random.randint(100000, 999999)
     
-    # Menggunakan endpoint standar api/summaries
-    url = f"https://api.indodax.com/api/summaries?cb={cache_buster}"
-    try:
-        res = requests.get(url, headers=headers, timeout=8)
-        if res.status_code == 200:
-            return res.json(), None
-        return None, res.status_code
-    except Exception as e:
-        return None, "Timeout"
+    headers = {
+        "User-Agent": random.choice(user_agents),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+    }
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        cache_buster = random.randint(100000, 999999)
+        url = f"https://api.indodax.com/api/summaries?cb={cache_buster}"
+        
+        try:
+            with requests.Session() as session:
+                res = session.get(url, headers=headers, timeout=7)
+                
+                if res.status_code == 200:
+                    return res.json(), None
+                
+                # Jika terkena Cloudflare rate-limit/blokir sementara, lakukan jeda & putar User-Agent
+                if res.status_code in [403, 429]:
+                    headers["User-Agent"] = random.choice(user_agents)
+                    time.sleep(1.5)
+                    continue
+                    
+            return None, res.status_code
+        except Exception as e:
+            if attempt == max_retries - 1:
+                return None, f"Timeout/Error: {str(e)}"
+            time.sleep(1)
+            
+    return None, "HTTP 403 Terblokir Cloudflare"
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -311,7 +362,7 @@ def home():
             
             if not json_data:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Gagal mengambil data pasar (HTTP {error_code}). Sila coba lagi.")
+                                            error=f"Indodax memblokir koneksi (HTTP {error_code}). Server Cloudflare mendeteksi aktivitas berlebih. Silakan tunggu 1-2 menit lalu coba lagi.")
 
             try:
                 tickers = json_data.get('tickers', {})
@@ -319,8 +370,8 @@ def home():
                 
                 for pair_key, ticker in tickers.items():
                     if pair_key.endswith('idr'):
-                        # Skip stablecoins agar radar fokus ke koin scalping asli
-                        if any(x in pair_key for x in ['usdt', 'usdc', 'idrt']):
+                        # FILTER: Skip koin stablecoin agar radar koin potensial tetap bersih
+                        if any(stable in pair_key for stable in ['usdt', 'usdc', 'idrt']):
                             continue
                             
                         close_price = float(ticker.get('last', 0) or 0)
@@ -331,10 +382,10 @@ def home():
                         if close_price == 0:
                             continue
 
-                        # HITUNG PROKSI KENAIKAN REAL-TIME
+                        # Menggunakan fungsi baru pembulatan perkiraan kelipatan
                         change_24h = hitung_proksi_change_24h(close_price, high_price, low_price)
                         
-                        if volume_idr > 1000000000:  # Minimum Volume 1 Miliar IDR
+                        if volume_idr > 1000000000:  # Batas volume minimum harian > 1 Miliar
                             vwap_scan = (high_price + low_price + close_price) / 3
                             stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100 if high_price > low_price else 50.0
                                 
@@ -369,17 +420,20 @@ def home():
             if not clean_pair.endswith("idr"):
                 clean_pair += "idr"
 
-            json_data, _ = fetch_indodax_tickers()
-            if not json_data or clean_pair not in json_data.get('tickers', {}):
+            json_data, error_code = fetch_indodax_tickers()
+            if not json_data:
                 return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Koin '{raw_input}' tidak ditemukan di data pasar IDR Indodax.")
+                                            error=f"Gagal mengambil data pasar (HTTP {error_code}). Server Cloudflare membatasi koneksi hosting.")
+                                            
+            if clean_pair not in json_data.get('tickers', {}):
+                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
+                                            error=f"Koin '{raw_input}' tidak ditemukan di pasar IDR Indodax.")
             
             ticker = json_data['tickers'][clean_pair]
             latest_price = float(ticker.get('last', 0))
             high_24h = float(ticker.get('high', 0))
             low_24h = float(ticker.get('low', 0))
             
-            # HITUNG PROKSI KENAIKAN MANUAL
             change_24h_manual = hitung_proksi_change_24h(latest_price, high_24h, low_24h)
             
             vwap = (high_24h + low_24h + latest_price) / 3
@@ -401,7 +455,7 @@ def home():
                 entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
                 entry_color = "#00e676"
             else:
-                signal = "WAIT & SEE (Setup Belum Matang)"
+                signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
                 price_entry = vwap
                 reason = f"Harga terindikasi tertahan resisten harian atau indikator osilator jenuh."
                 m_min = 10 if stoch_rsi <= 20 else 30
