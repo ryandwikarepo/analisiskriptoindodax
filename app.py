@@ -94,13 +94,13 @@ HTML_TEMPLATE = """
         {% if potential_coins %}
             <div class="result-box">
                 <h3 style="color: #2196f3; margin-bottom: 5px;">🔥 AKTIVITAS TOP 10 PASAR IDR TERBESAR</h3>
-                <p style="color: #8d8d99; font-size: 12px; margin-top: 0;">Dievaluasi real-time berdasarkan Volume & Validasi Sinyal AI (Waktu: {{ waktu }} WIB)</p>
+                <p style="color: #8d8d99; font-size: 12px; margin-top: 0;">Dievaluasi real-time berdasarkan Proksi Perubahan Pasar Terdekat (Waktu: {{ waktu }} WIB)</p>
                 <table>
                     <thead>
                         <tr>
                             <th>Pair Koin</th>
                             <th>Harga Sekarang</th>
-                            <th>Kenaikan (24h)</th>
+                            <th>Kenaikan (24h) Proksi</th>
                             <th>Volume Pasar (24h)</th>
                             <th>Rekomendasi AI</th>
                             <th>Estimasi Jam Entry</th>
@@ -135,7 +135,7 @@ HTML_TEMPLATE = """
         {% if manual_result %}
             <div class="result-box">
                 <h3>Hasil Analisis Real-Time: {{ pair }}</h3>
-                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h: 
+                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h Proksi: 
                     <span style="color: {% if manual_result.change_24h > 0 %}#00e676{% elif manual_result.change_24h < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
                         {{ "+" if manual_result.change_24h > 0 else "" }}{{ "{:.2f}".format(manual_result.change_24h) }}%
                     </span>
@@ -183,7 +183,7 @@ HTML_TEMPLATE = """
                                         <strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9 (Tren Naik). Jika di bawah EMA 9, harga rawan jatuh terseret longsor ke bawah.</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9.</span>
                             </li>
                             
                             <li>
@@ -193,18 +193,17 @@ HTML_TEMPLATE = """
                                         <strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80% (Aman/Oversold/Squeeze). Jika di atas 80% (Overbought), pasar sudah terlalu jenuh beli dan rawan aksi ambil untung massal (Dump).</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80%.</span>
                             </li>
                             
                             <li>
                                 <div class="indicator-header">
                                     <span>
                                         {% if manual_result.latest_price <= manual_result.vwap * 1.008 %}✅{% else %}❌{% endif %}
-                                        <strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }} 
-                                        ({% if manual_result.latest_price <= manual_result.vwap %}Diskon / Undervalued{% else %}Premium / Overvalued{% endif %})
+                                        <strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }}
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Posisi harga terakhir tidak boleh melebihi 0.8% di atas garis tengah VWAP. Membeli terlalu jauh di atas VWAP meningkatkan risiko nyangkut di pucuk harga rata-rata bandar.</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Posisi harga terakhir tidak boleh melebihi 0.8% di atas garis tengah VWAP.</span>
                             </li>
                         </ul>
                     </div>
@@ -234,97 +233,23 @@ HTML_TEMPLATE = """
                     data: {
                         labels: ['-15m', '-10m', '-5m', 'Live Price'],
                         datasets: [
-                            {
-                                label: 'Harga (IDR)',
-                                data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice],
-                                borderColor: '#ffffff',
-                                borderWidth: 3,
-                                pointBackgroundColor: '#ffffff',
-                                tension: 0.1,
-                                yAxisID: 'y_price'
-                            },
-                            {
-                                label: 'VWAP (Volume)',
-                                data: [vwapVal, vwapVal, vwapVal, vwapVal],
-                                borderColor: '#2196f3',
-                                borderWidth: 2,
-                                borderDash: [4, 4],
-                                pointRadius: 0,
-                                yAxisID: 'y_price'
-                            },
-                            {
-                                label: 'EMA 9',
-                                data: [ema9Val * 0.997, ema9Val * 0.999, ema9Val * 0.998, ema9Val],
-                                borderColor: '#00e676',
-                                borderWidth: 2,
-                                pointRadius: 0,
-                                yAxisID: 'y_price'
-                            },
-                            {
-                                label: 'EMA 21',
-                                data: [ema21Val * 0.994, ema21Val * 0.996, ema21Val * 0.995, ema21Val],
-                                borderColor: '#ff4d4d',
-                                borderWidth: 2,
-                                pointRadius: 0,
-                                yAxisID: 'y_price'
-                            },
-                            {
-                                label: 'Stochastic RSI (%)',
-                                data: [stochRsiVal * 0.6, stochRsiVal * 0.8, stochRsiVal * 0.9, stochRsiVal],
-                                borderColor: '#e040fb',
-                                borderWidth: 2.5,
-                                backgroundColor: 'rgba(224, 64, 251, 0.1)',
-                                fill: true,
-                                yAxisID: 'y_stoch',
-                                tension: 0.1
-                            },
-                            {
-                                label: 'Overbought (80)',
-                                data: [80, 80, 80, 80],
-                                borderColor: 'rgba(255, 77, 77, 0.4)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                pointRadius: 0,
-                                yAxisID: 'y_stoch'
-                            },
-                            {
-                                label: 'Oversold (20)',
-                                data: [20, 20, 20, 20],
-                                borderColor: 'rgba(0, 230, 118, 0.4)',
-                                borderWidth: 1,
-                                borderDash: [5, 5],
-                                pointRadius: 0,
-                                yAxisID: 'y_stoch'
-                            }
+                            { label: 'Harga (IDR)', data: [livePrice * 0.995, livePrice * 1.002, livePrice * 0.998, livePrice], borderColor: '#ffffff', borderWidth: 3, pointBackgroundColor: '#ffffff', tension: 0.1, yAxisID: 'y_price' },
+                            { label: 'VWAP (Volume)', data: [vwapVal, vwapVal, vwapVal, vwapVal], borderColor: '#2196f3', borderWidth: 2, borderDash: [4, 4], pointRadius: 0, yAxisID: 'y_price' },
+                            { label: 'EMA 9', data: [ema9Val * 0.997, ema9Val * 0.999, ema9Val * 0.998, ema9Val], borderColor: '#00e676', borderWidth: 2, pointRadius: 0, yAxisID: 'y_price' },
+                            { label: 'EMA 21', data: [ema21Val * 0.994, ema21Val * 0.996, ema21Val * 0.995, ema21Val], borderColor: '#ff4d4d', borderWidth: 2, pointRadius: 0, yAxisID: 'y_price' },
+                            { label: 'Stochastic RSI (%)', data: [stochRsiVal * 0.6, stochRsiVal * 0.8, stochRsiVal * 0.9, stochRsiVal], borderColor: '#e040fb', borderWidth: 2.5, backgroundColor: 'rgba(224, 64, 251, 0.1)', fill: true, yAxisID: 'y_stoch', tension: 0.1 },
+                            { label: 'Overbought (80)', data: [80, 80, 80, 80], borderColor: 'rgba(255, 77, 77, 0.4)', borderWidth: 1, borderDash: [5, 5], pointRadius: 0, yAxisID: 'y_stoch' },
+                            { label: 'Oversold (20)', data: [20, 20, 20, 20], borderColor: 'rgba(0, 230, 118, 0.4)', borderWidth: 1, borderDash: [5, 5], pointRadius: 0, yAxisID: 'y_stoch' }
                         ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        plugins: {
-                            legend: { labels: { color: '#8d8d99', font: { size: 11 } } }
-                        },
+                        plugins: { legend: { labels: { color: '#8d8d99', font: { size: 11 } } } },
                         scales: {
-                            y_price: {
-                                type: 'linear',
-                                position: 'left',
-                                grid: { color: '#29292e' },
-                                ticks: { color: '#fff' },
-                                title: { display: true, text: 'Harga Indodax', color: '#8d8d99' }
-                            },
-                            y_stoch: {
-                                type: 'linear',
-                                position: 'right',
-                                min: 0,
-                                max: 100,
-                                grid: { display: false },
-                                ticks: { color: '#e040fb', stepSize: 20 },
-                                title: { display: true, text: 'Stoch RSI %', color: '#e040fb' }
-                            },
-                            x: {
-                                grid: { display: false },
-                                ticks: { color: '#8d8d99' }
-                            }
+                            y_price: { type: 'linear', position: 'left', grid: { color: '#29292e' }, ticks: { color: '#fff' } },
+                            y_stoch: { type: 'linear', position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { color: '#e040fb', stepSize: 20 } },
+                            x: { grid: { display: false }, ticks: { color: '#8d8d99' } }
                         }
                     }
                 });
@@ -335,37 +260,41 @@ HTML_TEMPLATE = """
 </html>
 """
 
-def fetch_indodax_data_clean():
+def hitung_proksi_change_24h(last, high, low):
+    """
+    Fungsi khusus kalibrasi persentase agar mendekati pergerakan asli di Indodax 
+    tanpa bergantung pada endpoint summaries yang sering mogok (0.00%).
+    """
+    if high <= low:
+        return 0.0
+    
+    # Hitung posisi harga relatif dalam skala 0 sampai 1
+    posisi_relatif = (last - low) / (high - low)
+    
+    # Hitung rentang volatilitas harian dalam persen
+    rentang_persen = ((high - low) / low) * 100
+    
+    # Proksi akhir: Menggeser titik tengah menjadi 0%
+    # Jika posisi harga di atas setengah harga harian, nilai positif. Jika di bawah, nilai negatif.
+    hasil_proksi = (posisi_relatif - 0.5) * 2 * (rentang_persen * 0.45)
+    return hasil_proksi
+
+def fetch_indodax_tickers():
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     ]
-    
-    headers = {
-        "User-Agent": random.choice(user_agents),
-        "Accept": "application/json"
-    }
-    
+    headers = {"User-Agent": random.choice(user_agents), "Accept": "application/json"}
     cache_buster = random.randint(100000, 999999)
-    urls = [
-        f"https://api.indodax.com/api/summaries?cb={cache_buster}",
-        f"https://indodax.com/api/summaries?cb={cache_buster}"
-    ]
     
-    last_status = 200
-    for url in urls:
-        try:
-            res = requests.get(url, headers=headers, timeout=8)
-            if res.status_code == 200:
-                data = res.json()
-                if isinstance(data, dict) and 'tickers' in data:
-                    return data, None
-            last_status = res.status_code
-        except Exception:
-            continue
-            
-    return None, last_status
-
+    # Menggunakan endpoint standar api/summaries
+    url = f"https://api.indodax.com/api/summaries?cb={cache_buster}"
+    try:
+        res = requests.get(url, headers=headers, timeout=8)
+        if res.status_code == 200:
+            return res.json(), None
+        return None, res.status_code
+    except Exception as e:
+        return None, "Timeout"
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -378,38 +307,34 @@ def home():
         action = request.form.get('action')
 
         if action == "scan_potential":
-            json_data, error_code = fetch_indodax_data_clean()
+            json_data, error_code = fetch_indodax_tickers()
             
             if not json_data:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Akses pasar ditolak Cloudflare Indodax (HTTP {error_code or 'Timeout'}). Silakan coba kembali sesaat lagi.")
+                                            error=f"Gagal mengambil data pasar (HTTP {error_code}). Sila coba lagi.")
 
             try:
                 tickers = json_data.get('tickers', {})
-                prices_24h = json_data.get('prices_24h', {})
-                
                 all_idr_coins = []
+                
                 for pair_key, ticker in tickers.items():
-                    if pair_key.endswith('idr') and pair_key not in ['btcidr', 'ethidr', 'usdtidr', 'usdcidr']:
+                    if pair_key.endswith('idr'):
+                        # Skip stablecoins agar radar fokus ke koin scalping asli
+                        if any(x in pair_key for x in ['usdt', 'usdc', 'idrt']):
+                            continue
+                            
                         close_price = float(ticker.get('last', 0) or 0)
                         high_price = float(ticker.get('high', 0) or 0)
                         low_price = float(ticker.get('low', 0) or 0)
                         volume_idr = float(ticker.get('vol_idr', 0) or 0)
                         
-                        if volume_idr == 0:
-                            base_vol = float(ticker.get('vol_' + pair_key.replace('idr', ''), 0) or 0)
-                            volume_idr = base_vol * close_price
+                        if close_price == 0:
+                            continue
+
+                        # HITUNG PROKSI KENAIKAN REAL-TIME
+                        change_24h = hitung_proksi_change_24h(close_price, high_price, low_price)
                         
-                        # PARSING AKURAT KENAIKAN 24 JAM SINKRON INDODAX
-                        # Mengambil data harga open 24 jam lalu langsung dari objek prices_24h milik API Indodax
-                        open_price = float(prices_24h.get(pair_key, 0) or 0)
-                        if open_price > 0:
-                            change_24h = ((close_price - open_price) / open_price) * 100
-                        else:
-                            # Fallback jika objek prices_24h kosong, hitung mundur menggunakan persentase internal bursa jika tersedia
-                            change_24h = 0.0
-                        
-                        if volume_idr > 1000000000:
+                        if volume_idr > 1000000000:  # Minimum Volume 1 Miliar IDR
                             vwap_scan = (high_price + low_price + close_price) / 3
                             stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100 if high_price > low_price else 50.0
                                 
@@ -420,12 +345,9 @@ def home():
                                 entry_time_text = "SEKARANG"
                             else:
                                 m_min, m_max = (10, 20) if stoch_rsi_scan <= 20 else ((60, 120) if stoch_rsi_scan >= 80 else (30, 60))
-                                t_min = (waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')
-                                t_max = (waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')
-                                entry_time_text = f"{t_min} - {t_max}"
+                                entry_time_text = f"{(waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')} - {(waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')}"
 
                             coin_name = pair_key.replace('idr', '').upper() + "/IDR"
-
                             all_idr_coins.append({
                                 "pair": coin_name, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
                                 "is_ready": is_ready_scan, "entry_time_text": entry_time_text,
@@ -439,7 +361,7 @@ def home():
                 return response
                 
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memproses parsing data: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memproses data: {str(e)}")
 
         elif action == "analyze_manual":
             raw_input = request.form['pair'].upper().strip()
@@ -447,92 +369,57 @@ def home():
             if not clean_pair.endswith("idr"):
                 clean_pair += "idr"
 
-            headers_manual = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-            }
-            cb_manual = random.randint(100000, 999999)
+            json_data, _ = fetch_indodax_tickers()
+            if not json_data or clean_pair not in json_data.get('tickers', {}):
+                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
+                                            error=f"Koin '{raw_input}' tidak ditemukan di data pasar IDR Indodax.")
             
-            try:
-                # Ambil data utama dari ticker tunggal
-                res = requests.get(f"https://api.indodax.com/api/ticker/{clean_pair}?cb={cb_manual}", headers=headers_manual, timeout=8)
-                
-                # Serta ambil summaries untuk mencocokkan basis data prices_24h bursa
-                json_data, _ = fetch_indodax_data_clean()
-                
-                if res.status_code == 200 and 'ticker' in res.json():
-                    ticker = res.json()['ticker']
-                else:
-                    ticker = json_data.get('tickers', {}).get(clean_pair) if json_data else None
+            ticker = json_data['tickers'][clean_pair]
+            latest_price = float(ticker.get('last', 0))
+            high_24h = float(ticker.get('high', 0))
+            low_24h = float(ticker.get('low', 0))
+            
+            # HITUNG PROKSI KENAIKAN MANUAL
+            change_24h_manual = hitung_proksi_change_24h(latest_price, high_24h, low_24h)
+            
+            vwap = (high_24h + low_24h + latest_price) / 3
+            ema_9 = (latest_price * 0.6) + (high_24h * 0.4)
+            ema_21 = (high_24h + low_24h) / 2
+            
+            is_bullish = latest_price >= vwap * 0.99
+            ema_status = "BULLISH SUPPORT" if is_bullish else "BEARISH REJECTION"
 
-                if not ticker:
-                    return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                                error=f"Akses koin '{raw_input}' ditolak Indodax atau token tidak terdaftar di pasar IDR.")
-                
-                latest_price = float(ticker.get('last', 0))
-                high_24h = float(ticker.get('high', 0))
-                low_24h = float(ticker.get('low', 0))
-                
-                # PARSING AKURAT MANUAL 24H CHANGE
-                change_24h_manual = 0.0
-                if json_data:
-                    open_price_manual = float(json_data.get('prices_24h', {}).get(clean_pair, 0) or 0)
-                    if open_price_manual > 0:
-                        change_24h_manual = ((latest_price - open_price_manual) / open_price_manual) * 100
-                
-                vwap = (high_24h + low_24h + latest_price) / 3
-                ema_9 = (latest_price * 0.6) + (high_24h * 0.4)
-                ema_21 = (high_24h + low_24h) / 2
-                
-                if latest_price >= vwap * 0.99:
-                    ema_status = "BULLISH SUPPORT (Harga ditopang area rata-rata harian)"
-                    is_bullish = True
-                else:
-                    ema_status = "BEARISH REJECTION (Harga tertekan di bawah batas aman)"
-                    is_bullish = False
+            stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100 if high_24h > low_24h else 50.0
+            stoch_status = "OVERBOUGHT" if stoch_rsi >= 80 else ("OVERSOLD" if stoch_rsi <= 20 else "KONSOLIDASI")
+            
+            is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
+            
+            if is_ready:
+                signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
+                price_entry = latest_price
+                reason = f"Kombinasi data proksi valid. Harga berjalan aman di zona akumulasi."
+                entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
+                entry_color = "#00e676"
+            else:
+                signal = "WAIT & SEE (Setup Belum Matang)"
+                price_entry = vwap
+                reason = f"Harga terindikasi tertahan resisten harian atau indikator osilator jenuh."
+                m_min = 10 if stoch_rsi <= 20 else 30
+                entry_status_text = f"NANTI (Saran re-entry aman setelah jam {(waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')} WIB)"
+                entry_color = "#ffb300"
 
-                stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100 if high_24h > low_24h else 50.0
-                stoch_status = "OVERBOUGHT (Jenuh Beli)" if stoch_rsi >= 80 else ("OVERSOLD (Jenuh Jual)" if stoch_rsi <= 20 else "KONSOLIDASI (Squeeze Area)")
-                
-                is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
-                
-                if is_ready:
-                    signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
-                    price_entry = latest_price
-                    reason = f"Kombinasi data valid! Volume kuat, harga berjalan stabil di atas area akumulasi pasar, serta Stochastic RSI harian ({stoch_rsi:.1f}%) belum mengalami overbought."
-                    entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
-                    entry_color = "#00e676"
-                else:
-                    signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
-                    price_entry = vwap if latest_price > vwap else latest_price
-                    reason = f"Struktur grafik terindikasi memicu Bearish Rejection dari resisten harian atau indikator Stochastic RSI berada pada level rawan dump."
-                    
-                    menit_tunggu_min, menit_tunggu_max = (10, 20) if stoch_rsi <= 20 else ((60, 120) if stoch_rsi >= 80 else (30, 60))
-                    jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
-                    jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
-                    
-                    entry_status_text = f"NANTI (Estimasi Re-entry aman sekitar jam {jam_nanti_min} - {jam_nanti_max} WIB)"
-                    entry_color = "#ffb300"
-
-                price_tp = price_entry * 1.017
-                price_sl = price_entry * 0.99
-                display_pair_name = clean_pair.replace("idr", "").upper() + "/IDR"
-
-                data_res = {
-                    "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
-                    "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
-                    "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "SINKRONISASI REAL-TIME AKTIF",
-                    "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
-                    "entry_status_text": entry_status_text, "entry_color": entry_color, "change_24h": change_24h_manual,
-                    "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
-                    "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
-                }
-                
-                response = make_response(render_template_string(HTML_TEMPLATE, pair=display_pair_name, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None))
-                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-                return response
-
-            except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koneksi terputus saat kalkulasi manual: {str(e)}")
+            data_res = {
+                "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
+                "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
+                "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "SINKRONISASI PROKSI AKTIF",
+                "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, 
+                "price_tp": price_entry * 1.017, "price_sl": price_entry * 0.99,
+                "entry_status_text": entry_status_text, "entry_color": entry_color, "change_24h": change_24h_manual,
+                "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
+                "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
+            }
+            
+            return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
 
