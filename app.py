@@ -361,15 +361,13 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
-                        # FIX PERMANEN: Ambil persentase perubahan dari raw info API Indodax
-                        change_24h = 0.0
-                        if 'info' in ticker:
-                            change_24h_raw = ticker['info'].get('pct') or ticker['info'].get('percentage') or ticker.get('percentage')
-                            if change_24h_raw is not None:
-                                try:
-                                    change_24h = float(change_24h_raw)
-                                except ValueError:
-                                    change_24h = 0.0
+                        # FIX FORMULA: Hitung manual persentase perubahan harian (24h)
+                        if low_price > 0:
+                            change_24h = ((close_price - low_price) / low_price) * 100
+                            if high_price > 0 and close_price < ((high_price + low_price) / 2):
+                                change_24h = -((high_price - close_price) / high_price) * 100
+                        else:
+                            change_24h = 0.0
                         
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
@@ -418,15 +416,13 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # FIX PERMANEN: Ambil persentase dari raw info API Indodax
-                change_24h_manual = 0.0
-                if 'info' in ticker:
-                    change_24h_raw = ticker['info'].get('pct') or ticker['info'].get('percentage') or ticker.get('percentage')
-                    if change_24h_raw is not None:
-                        try:
-                            change_24h_manual = float(change_24h_raw)
-                        except ValueError:
-                            change_24h_manual = 0.0
+                # FIX FORMULA: Hitung manual persentase koin harian (24h)
+                if low_24h > 0:
+                    change_24h_manual = ((latest_price - low_24h) / low_24h) * 100
+                    if high_24h > 0 and latest_price < ((high_24h + low_24h) / 2):
+                        change_24h_manual = -((high_24h - latest_price) / high_24h) * 100
+                else:
+                    change_24h_manual = 0.0
                 
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
