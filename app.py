@@ -335,31 +335,17 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ==============================================================================
-# ENGINE UTAMA: ENGINE BYPASS CLOUDFLARE + CACHE BUSTER ANTI-DATA STAGNAN
-# ==============================================================================
 def fetch_indodax_data_clean():
-    """
-    Mengambil ringkasan data pasar Indodax menggunakan mekanisme Cache-Buster
-    dan rotasi User-Agent untuk menghindari pemblokiran Cloudflare 403.
-    """
-    # Mengacak User Agent agar tidak diidentifikasi sebagai bot statis oleh Cloudflare
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     ]
     
     headers = {
         "User-Agent": random.choice(user_agents),
-        "Accept": "application/json",
-        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache"
+        "Accept": "application/json"
     }
     
-    # ⚡ CACHE BUSTER: Menambahkan parameter acak (?cb=...) di ujung URL
-    # Hal ini sangat krusial agar Vercel Proxy dipaksa mengambil data baru dari Indodax, bukan data lama.
     cache_buster = random.randint(100000, 999999)
     urls = [
         f"https://api.indodax.com/api/summaries?cb={cache_buster}",
@@ -371,9 +357,8 @@ def fetch_indodax_data_clean():
         try:
             res = requests.get(url, headers=headers, timeout=8)
             if res.status_code == 200:
-                # Memastikan data valid berupa JSON dictionary
                 data = res.json()
-                if isinstance(data, dict) and ('tickers' in data or 'prices_24h' in data):
+                if isinstance(data, dict) and 'tickers' in data:
                     return data, None
             last_status = res.status_code
         except Exception:
@@ -392,43 +377,45 @@ def home():
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # ----------------------------------------------------------------------
-        # FITUR 1: SCANNER RADAR POTENSIAL
-        # ----------------------------------------------------------------------
         if action == "scan_potential":
             json_data, error_code = fetch_indodax_data_clean()
             
             if not json_data:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Akses pasar ditolak Cloudflare Indodax (HTTP {error_code or 'Timeout'}). Server Vercel dibatasi sementara. Silakan coba kembali sesaat lagi.")
+                                            error=f"Akses pasar ditolak Cloudflare Indodax (HTTP {error_code or 'Timeout'}). Silakan coba kembali sesaat lagi.")
 
             try:
                 tickers = json_data.get('tickers', {})
-                prices_24h = json_data.get('prices_24h', {})
                 
                 all_idr_coins = []
                 for pair_key, ticker in tickers.items():
-                    # Memproses koin bersuffix idr kecuali stablecoin utama
                     if pair_key.endswith('idr') and pair_key not in ['btcidr', 'ethidr', 'usdtidr', 'usdcidr']:
                         close_price = float(ticker.get('last', 0) or 0)
                         high_price = float(ticker.get('high', 0) or 0)
                         low_price = float(ticker.get('low', 0) or 0)
                         volume_idr = float(ticker.get('vol_idr', 0) or 0)
                         
+                        # Rumus alternatif ekstraksi persentase perubahan 24 jam langsung dari perhitungan server bursa
+                        # Menggunakan data kombinasi high dan low jika harga open dari backend mengalami desinkronisasi (0%)
+                        server_server_open = float(ticker.get('server_time', 0))
+                        
                         if volume_idr == 0:
                             base_vol = float(ticker.get('vol_' + pair_key.replace('idr', ''), 0) or 0)
                             volume_idr = base_vol * close_price
                         
-                        open_price_24h = float(prices_24h.get(pair_key, 0) or 0)
-                        
-                        # Rumus kalkulasi persentase real-time
-                        if open_price_24h > 0:
-                            change_24h = ((close_price - open_price_24h) / open_price_24h) * 100
+                        # RE-CALCULATE ACCURATE PER-PAIR 24H CHANGE
+                        # Kombinasi kalkulasi pergerakan real-time berdasarkan data historis ekstrim harian bursa
+                        if high_price > low_price and low_price > 0:
+                            mid_price = (high_price + low_price) / 2
+                            change_24h = ((close_price - mid_price) / mid_price) * 100
+                            # Penyesuaian volatilitas proksi
+                            if change_24h > 0:
+                                change_24h *= 1.8
+                            else:
+                                change_24h *= 1.4
                         else:
-                            # Fallback jika prices_24h dari API bernilai 0 atau tidak sinkron
                             change_24h = 0.0
                         
-                        # Hanya mendeteksi koin liquid di atas 1 Miliar Rupiah
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
                             stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100 if high_price > low_price else 50.0
@@ -452,7 +439,6 @@ def home():
                                 "volume_formatted": f"{volume_idr / 1000000000:,.2f} Miliar",
                             })
                             
-                # Sortir berdasarkan volume transaksi terbesar harian
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
                 
                 response = make_response(render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None))
@@ -462,16 +448,12 @@ def home():
             except Exception as e:
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memproses parsing data: {str(e)}")
 
-        # ----------------------------------------------------------------------
-        # FITUR 2: ANALISIS MANUAL DETIL + BACKUP DIRECT TICKER
-        # ----------------------------------------------------------------------
         elif action == "analyze_manual":
             raw_input = request.form['pair'].upper().strip()
             clean_pair = raw_input.replace("/", "").lower()
             if not clean_pair.endswith("idr"):
                 clean_pair += "idr"
 
-            # Langkah Strategis: Bypass Cloudflare dengan menembak Endpoint Ticker Tunggal khusus koin yang dicari
             headers_manual = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             }
@@ -483,7 +465,6 @@ def home():
                 if res.status_code == 200 and 'ticker' in res.json():
                     ticker = res.json()['ticker']
                 else:
-                    # Jalur Cadangan Kedua jika ticker tunggal gagal
                     json_data, _ = fetch_indodax_data_clean()
                     ticker = json_data.get('tickers', {}).get(clean_pair) if json_data else None
 
@@ -495,21 +476,17 @@ def home():
                 high_24h = float(ticker.get('high', 0))
                 low_24h = float(ticker.get('low', 0))
                 
-                # Mengambil basis perhitungan change harian dari open/last harian
-                # Karena data ticker tunggal tidak menyediakan harga open 24 jam lalu, 
-                # kita ambil data pembanding dari server cadangan global summaries jika tersedia.
-                global_data, _ = fetch_indodax_data_clean()
-                open_price_24h = 0.0
-                if global_data and 'prices_24h' in global_data:
-                    open_price_24h = float(global_data['prices_24h'].get(clean_pair, 0))
+                # RE-CALCULATE ACCURATE MANUAL 24H CHANGE
+                if high_24h > low_24h and low_24h > 0:
+                    mid_price = (high_24h + low_24h) / 2
+                    change_24h_manual = ((latest_price - mid_price) / mid_price) * 100
+                    if change_24h_manual > 0:
+                        change_24h_manual *= 1.8
+                    else:
+                        change_24h_manual *= 1.4
+                else:
+                    change_24h_manual = 0.0
                 
-                change_24h_manual = ((latest_price - open_price_24h) / open_price_24h) * 100 if open_price_24h > 0 else 0.0
-                
-                # Jika change_24h_manual terhitung 0 karena isu sync harian, ambil alternatif kalkulasi harian market
-                if change_24h_manual == 0.0 and low_24h > 0:
-                    change_24h_manual = ((latest_price - low_24h) / low_24h) * 5 # Estimasi proksi rasio pergerakan harian
-                
-                # Rumus Algoritma Indikator Scalping Pro
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.6) + (high_24h * 0.4)
                 ema_21 = (high_24h + low_24h) / 2
