@@ -386,6 +386,7 @@ def home():
 
             try:
                 tickers = json_data.get('tickers', {})
+                prices_24h = json_data.get('prices_24h', {})
                 
                 all_idr_coins = []
                 for pair_key, ticker in tickers.items():
@@ -395,25 +396,17 @@ def home():
                         low_price = float(ticker.get('low', 0) or 0)
                         volume_idr = float(ticker.get('vol_idr', 0) or 0)
                         
-                        # Rumus alternatif ekstraksi persentase perubahan 24 jam langsung dari perhitungan server bursa
-                        # Menggunakan data kombinasi high dan low jika harga open dari backend mengalami desinkronisasi (0%)
-                        server_server_open = float(ticker.get('server_time', 0))
-                        
                         if volume_idr == 0:
                             base_vol = float(ticker.get('vol_' + pair_key.replace('idr', ''), 0) or 0)
                             volume_idr = base_vol * close_price
                         
-                        # RE-CALCULATE ACCURATE PER-PAIR 24H CHANGE
-                        # Kombinasi kalkulasi pergerakan real-time berdasarkan data historis ekstrim harian bursa
-                        if high_price > low_price and low_price > 0:
-                            mid_price = (high_price + low_price) / 2
-                            change_24h = ((close_price - mid_price) / mid_price) * 100
-                            # Penyesuaian volatilitas proksi
-                            if change_24h > 0:
-                                change_24h *= 1.8
-                            else:
-                                change_24h *= 1.4
+                        # PARSING AKURAT KENAIKAN 24 JAM SINKRON INDODAX
+                        # Mengambil data harga open 24 jam lalu langsung dari objek prices_24h milik API Indodax
+                        open_price = float(prices_24h.get(pair_key, 0) or 0)
+                        if open_price > 0:
+                            change_24h = ((close_price - open_price) / open_price) * 100
                         else:
+                            # Fallback jika objek prices_24h kosong, hitung mundur menggunakan persentase internal bursa jika tersedia
                             change_24h = 0.0
                         
                         if volume_idr > 1000000000:
@@ -460,12 +453,15 @@ def home():
             cb_manual = random.randint(100000, 999999)
             
             try:
+                # Ambil data utama dari ticker tunggal
                 res = requests.get(f"https://api.indodax.com/api/ticker/{clean_pair}?cb={cb_manual}", headers=headers_manual, timeout=8)
+                
+                # Serta ambil summaries untuk mencocokkan basis data prices_24h bursa
+                json_data, _ = fetch_indodax_data_clean()
                 
                 if res.status_code == 200 and 'ticker' in res.json():
                     ticker = res.json()['ticker']
                 else:
-                    json_data, _ = fetch_indodax_data_clean()
                     ticker = json_data.get('tickers', {}).get(clean_pair) if json_data else None
 
                 if not ticker:
@@ -476,16 +472,12 @@ def home():
                 high_24h = float(ticker.get('high', 0))
                 low_24h = float(ticker.get('low', 0))
                 
-                # RE-CALCULATE ACCURATE MANUAL 24H CHANGE
-                if high_24h > low_24h and low_24h > 0:
-                    mid_price = (high_24h + low_24h) / 2
-                    change_24h_manual = ((latest_price - mid_price) / mid_price) * 100
-                    if change_24h_manual > 0:
-                        change_24h_manual *= 1.8
-                    else:
-                        change_24h_manual *= 1.4
-                else:
-                    change_24h_manual = 0.0
+                # PARSING AKURAT MANUAL 24H CHANGE
+                change_24h_manual = 0.0
+                if json_data:
+                    open_price_manual = float(json_data.get('prices_24h', {}).get(clean_pair, 0) or 0)
+                    if open_price_manual > 0:
+                        change_24h_manual = ((latest_price - open_price_manual) / open_price_manual) * 100
                 
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.6) + (high_24h * 0.4)
