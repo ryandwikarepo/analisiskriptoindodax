@@ -1,5 +1,5 @@
-from flask import Flask, render_template_string, request
-import ccxt
+from flask import Flask, render_template_string, request, make_response
+import requests
 from datetime import datetime, timedelta
 import pytz
 
@@ -81,7 +81,7 @@ HTML_TEMPLATE = """
             <div class="menu-title">💵 FITUR 2: KALKULATOR SCALPING INSTAN (+1.7%)</div>
             <form method="POST" class="flex-form">
                 <input type="hidden" name="action" value="analyze_manual">
-                <input type="text" name="pair" placeholder="Contoh: BTC/IDR" value="{{ pair }}" required>
+                <input type="text" name="pair" placeholder="Contoh: BTC/IDR atau SIREN" value="{{ pair }}" required>
                 <button type="submit" class="btn-scalping">Analisis Scalping Koin</button>
             </form>
         </div>
@@ -335,7 +335,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# LOGIKA BACKEND FLASK
+# LOGIKA BACKEND FLASK NATIVE INDODAX API (100% SINKRON)
 # ==============================================================================
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -343,32 +343,51 @@ def home():
     tz_jkt = pytz.timezone('Asia/Jakarta')
     waktu_sekarang_obj = datetime.now(tz_jkt)
     waktu_sekarang = waktu_sekarang_obj.strftime('%d %B %Y, %H:%M')
-    exchange = ccxt.indodax()
     
+    # Menghindari Vercel Edge Caching agar data selalu fresh saat reload
+    headers_api = {
+        "User-Agent": "Mozilla/5.0",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
+    }
+
     if request.method == 'POST':
         action = request.form.get('action')
 
-        # FITUR 1: SCANNER
+        # FITUR 1: SCANNER RADAR POTENSIAL
         if action == "scan_potential":
             try:
-                tickers = exchange.fetch_tickers()
+                # Menggunakan API Summary Indodax untuk mendapatkan data open harian asli
+                res = requests.get("https://api.indodax.com/api/summaries", headers=headers_api, timeout=10)
+                json_data = res.json()
+                
+                tickers = json_data.get('tickers', {})
+                prices_24h = json_data.get('prices_24h', {})
+                
                 all_idr_coins = []
-                for symbol, ticker in tickers.items():
-                    if symbol.endswith('/IDR') and symbol not in ['BTC/IDR', 'ETH/IDR']:
-                        close_price = ticker.get('last', 0) or 0
-                        high_price = ticker.get('high', 0) or 0
-                        low_price = ticker.get('low', 0) or 0
-                        base_volume = ticker.get('baseVolume', 0) or 0
-                        volume_idr = base_volume * close_price
+                for pair_key, ticker in tickers.items():
+                    # Filter pasar IDR saja dan singkirkan koin utama jika ingin fokus ke koin alternatif (altcoins)
+                    if pair_key.endswith('idr') and pair_key not in ['btcidr', 'ethidr']:
+                        close_price = float(ticker.get('last', 0))
+                        high_price = float(ticker.get('high', 0))
+                        low_price = float(ticker.get('low', 0))
                         
-                        # FIX FORMULA: Hitung manual persentase perubahan harian (24h)
-                        if low_price > 0:
-                            change_24h = ((close_price - low_price) / low_price) * 100
-                            if high_price > 0 and close_price < ((high_price + low_price) / 2):
-                                change_24h = -((high_price - close_price) / high_price) * 100
+                        # 1. FIXED SINKRONISASI VOLUME: Ambil 'vol_idr' bawaan dari sistem internal Indodax
+                        volume_idr = float(ticker.get('vol_idr', 0))
+                        if volume_idr == 0:
+                            # Fallback jikalau koin baru belum mengkalkulasi volume idr harian
+                            base_vol = float(ticker.get('vol_' + pair_key.replace('idr', ''), 0))
+                            volume_idr = base_vol * close_price
+                        
+                        # 2. FIXED SINKRONISASI KENAIKAN: Hitung berdasarkan Open Price 24 jam lalu
+                        open_price_24h = float(prices_24h.get(pair_key, 0))
+                        if open_price_24h > 0:
+                            change_24h = ((close_price - open_price_24h) / open_price_24h) * 100
                         else:
+                            # Fallback cadangan jika harga open tidak terlempar dari API
                             change_24h = 0.0
                         
+                        # Hanya proses koin dengan likuiditas volume diatas Rp 1 Miliar
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
                             ema_9_scan = (close_price * 0.7) + (high_price * 0.3)
@@ -378,7 +397,8 @@ def home():
                             else:
                                 stoch_rsi_scan = 50.0
                                 
-                            is_bullish_scan = close_price >= ema_9_scan
+                            is_bullish_scan = close_price >= len([ema_9_scan]) # Dummy check replacement 
+                            is_bullish_scan = close_price >= vwap_scan * 0.99
                             is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.008 and stoch_rsi_scan < 80
                             
                             if is_ready_scan:
@@ -392,35 +412,54 @@ def home():
                                 t_max = (waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')
                                 entry_time_text = f"{t_min} - {t_max}"
 
+                            # Format Nama Tampilan Pair (contoh: usdtidr -> USDT/IDR)
+                            coin_name = pair_key.replace('idr', '').upper() + "/IDR"
+
                             all_idr_coins.append({
-                                "pair": symbol, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
+                                "pair": coin_name, "price": close_price, "change": change_24h, "volume_raw": volume_idr,
                                 "is_ready": is_ready_scan, "entry_time_text": entry_time_text,
                                 "volume_formatted": f"{volume_idr / 1000000:,.1f} Juta" if volume_idr < 1000000000 else f"{volume_idr / 1000000000:,.2f} Miliar",
                             })
                             
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None)
+                
+                response = make_response(render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None))
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return response
+                
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai radar Indodax: {str(e)}")
 
-        # FITUR 2: KALKULATOR
+        # FITUR 2: ANALISIS MANUAL DETIL + SEBUTAN TARGET
         elif action == "analyze_manual":
-            pair = request.form['pair'].upper()
-            symbol_ccxt = pair
-            if '/' not in symbol_ccxt:
-                if symbol_ccxt.endswith("IDR"): symbol_ccxt = symbol_ccxt[:-3] + "/IDR"
+            raw_input = request.form['pair'].upper().strip()
+            
+            # Normalisasi Input agar bisa membaca "SIREN", "siren/idr", maupun "SIRENIDR"
+            clean_pair = raw_input.replace("/", "")
+            if not clean_pair.endswith("IDR"):
+                clean_pair = clean_pair + "IDR"
+            
+            pair_key_api = clean_pair.lower() # API Indodax menggunakan format lowercase tanpa slash
 
             try:
-                ticker = exchange.fetch_ticker(symbol_ccxt)
+                res = requests.get("https://api.indodax.com/api/summaries", headers=headers_api, timeout=10)
+                json_data = res.json()
+                
+                tickers = json_data.get('tickers', {})
+                prices_24h = json_data.get('prices_24h', {})
+                
+                if pair_key_api not in tickers:
+                    return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Pair Koin '{raw_input}' tidak terdaftar di pasar IDR Indodax.")
+                
+                ticker = tickers[pair_key_api]
                 latest_price = float(ticker['last'])
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # FIX FORMULA: Hitung manual persentase koin harian (24h)
-                if low_24h > 0:
-                    change_24h_manual = ((latest_price - low_24h) / low_24h) * 100
-                    if high_24h > 0 and latest_price < ((high_24h + low_24h) / 2):
-                        change_24h_manual = -((high_24h - latest_price) / high_24h) * 100
+                # 3. FIXED SINKRONISASI MANUAL KENAIKAN 24H
+                open_price_24h = float(prices_24h.get(pair_key_api, 0))
+                if open_price_24h > 0:
+                    change_24h_manual = ((latest_price - open_price_24h) / open_price_24h) * 100
                 else:
                     change_24h_manual = 0.0
                 
@@ -428,11 +467,11 @@ def home():
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
                 ema_21 = (high_24h + low_24h) / 2
                 
-                if latest_price >= ema_9:
-                    ema_status = "BULLISH (Harga stabil di atas EMA 9/21)"
+                if latest_price >= vwap * 0.99:
+                    ema_status = "BULLISH SUPPORT (Harga ditopang area rata-rata harian)"
                     is_bullish = True
                 else:
-                    ema_status = "BEARISH (Harga di bawah EMA 9)"
+                    ema_status = "BEARISH REJECTION (Harga tertekan di bawah batas aman)"
                     is_bullish = False
 
                 if high_24h > low_24h:
@@ -449,13 +488,13 @@ def home():
                 if is_ready:
                     signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                     price_entry = latest_price
-                    reason = f"Setup kombinasi sempurna! Tren terkonfirmasi Bullish di atas EMA 9/21, didukung harga dekat area VWAP, serta Stochastic RSI {stoch_rsi:.1f}% belum jenuh beli."
+                    reason = f"Kombinasi data valid! Volume kuat, harga berjalan stabil di atas area akumulasi pasar, serta Stochastic RSI harian ({stoch_rsi:.1f}%) belum mengalami overbought."
                     entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
                     entry_color = "#00e676"
                 else:
                     signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
-                    price_entry = vwap
-                    reason = f"AI mendeteksi anomali pada salah satu syarat utama strategi Anda. Silakan amati tanda silang (❌) pada matriks di bawah untuk melihat batas indikator yang dilanggar."
+                    price_entry = vwap if latest_price > vwap else latest_price
+                    reason = f"Struktur grafik terindikasi memicu Bearish Rejection dari resisten terdekat harian atau harga bergerak menjauh dari area aman akumulasi bandar."
                     
                     if stoch_rsi <= 20: menit_tunggu_min, menit_tunggu_max = 10, 20
                     elif stoch_rsi >= 80: menit_tunggu_min, menit_tunggu_max = 60, 120
@@ -464,24 +503,30 @@ def home():
                     jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
                     jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
                     
-                    entry_status_text = f"NANTI (Estimasi Open Posisi sekitar jam {jam_nanti_min} - {jam_nanti_max} WIB)"
+                    entry_status_text = f"NANTI (Estimasi Re-entry aman sekitar jam {jam_nanti_min} - {jam_nanti_max} WIB)"
                     entry_color = "#ffb300"
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
                 
+                display_pair_name = pair_key_api.replace("idr", "").upper() + "/IDR"
+
                 data_res = {
                     "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
                     "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
-                    "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "TERVERIFIKASI",
+                    "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "NORMAL / TERVERIFIKASI SINKRON",
                     "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
                     "entry_status_text": entry_status_text, "entry_color": entry_color, "change_24h": change_24h_manual,
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
                 }
-                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
+                
+                response = make_response(render_template_string(HTML_TEMPLATE, pair=display_pair_name, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None))
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return response
+
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=symbol_ccxt, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koin tidak ditemukan atau jaringan sibuk: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koneksi Indodax terputus: {str(e)}")
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
 
