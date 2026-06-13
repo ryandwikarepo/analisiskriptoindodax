@@ -6,7 +6,7 @@ import pytz
 app = Flask(__name__)
 
 # ==============================================================================
-# TEMPLATE HTML: CLEAN LAYOUT TERMINAL (MATRIKS DI ATAS JAM ENTRY)
+# TEMPLATE HTML: LAYOUT TERMINAL MATRIKS CLEAN
 # ==============================================================================
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -45,7 +45,6 @@ HTML_TEMPLATE = """
         
         .chart-container { background: #121214; padding: 15px; border-radius: 8px; border: 1px solid #29292e; margin-top: 20px; margin-bottom: 20px; }
         
-        /* Elemen Matriks Indikator Terbersih */
         .indicator-list { background: #1b1b1f; padding: 18px; border-radius: 8px; font-size: 14px; color: #a1a1aa; margin-top: 15px; margin-bottom: 20px; border: 1px solid #4d4d57; }
         .indicator-list ul { margin: 10px 0 0 0; padding-left: 0; list-style: none; }
         .indicator-list li { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #29292e; }
@@ -135,7 +134,11 @@ HTML_TEMPLATE = """
         {% if manual_result %}
             <div class="result-box">
                 <h3>Hasil Analisis Real-Time: {{ pair }}</h3>
-                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB</p>
+                <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h: 
+                    <span style="color: {% if manual_result.change_24h > 0 %}#00e676{% elif manual_result.change_24h < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
+                        {{ "+" if manual_result.change_24h > 0 else "" }}{{ "{:.2f}".format(manual_result.change_24h) }}%
+                    </span>
+                </p>
                 
                 <div class="grid">
                     <div class="card">
@@ -358,11 +361,10 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
-                        if high_price > 0 and low_price > 0:
-                            harga_dasar = (high_price + low_price) / 2
-                            change_24h = ((close_price - harga_dasar) / harga_dasar) * 100
-                        else:
-                            change_24h = ticker.get('percentage', 0) or 0.0
+                        # FIX: Ambil data perubahan langsung dari API Indodax
+                        change_24h = ticker.get('percentage', 0.0)
+                        if change_24h is None:
+                            change_24h = 0.0
                         
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
@@ -411,6 +413,9 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
+                # FIX: Ambil persentase perubahan dari API
+                change_24h_manual = ticker.get('percentage', 0.0) or 0.0
+                
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
                 ema_21 = (high_24h + low_24h) / 2
@@ -419,7 +424,7 @@ def home():
                     ema_status = "BULLISH (Harga stabil di atas EMA 9/21)"
                     is_bullish = True
                 else:
-                    ema_status = "BEARISH REJECTION (Harga tertolak di bawah EMA 9)"
+                    ema_status = "BEARISH (Harga di bawah EMA 9)"
                     is_bullish = False
 
                 if high_24h > low_24h:
@@ -462,7 +467,7 @@ def home():
                     "ema_9": ema_9, "ema_21": ema_21, "is_bullish": is_bullish, "ema_status": ema_status, 
                     "stoch_rsi": stoch_rsi, "stoch_status": stoch_status, "vol_status": "TERVERIFIKASI",
                     "signal": signal, "is_ready": is_ready, "reason": reason, "price_entry": price_entry, "price_tp": price_tp, "price_sl": price_sl,
-                    "entry_status_text": entry_status_text, "entry_color": entry_color,
+                    "entry_status_text": entry_status_text, "entry_color": entry_color, "change_24h": change_24h_manual,
                     "waktu_tp_awal": (waktu_sekarang_obj + timedelta(minutes=15)).strftime("%H:%M"),
                     "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
                 }
