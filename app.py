@@ -3,7 +3,6 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 import random
-import time
 
 app = Flask(__name__)
 
@@ -83,7 +82,7 @@ HTML_TEMPLATE = """
             <div class="menu-title">💵 FITUR 2: KALKULATOR SCALPING INSTAN (+1.7%)</div>
             <form method="POST" class="flex-form">
                 <input type="hidden" name="action" value="analyze_manual">
-                <input type="text" name="pair" placeholder="Contoh: BTC/IDR atau SIREN" value="{{ pair }}" required>
+                <input type="text" name="pair" placeholder="Contoh: BTC/IDR, HYPE, atau SIREN" value="{{ pair }}" required>
                 <button type="submit" class="btn-scalping">Analisis Scalping Koin</button>
             </form>
         </div>
@@ -114,11 +113,9 @@ HTML_TEMPLATE = """
                             <td>Rp {{ "{:,.2f}".format(coin.price) if coin.price < 100 else "{:,.0f}".format(coin.price) }}</td>
                             <td style="color: {% if coin.change > 0 %}#00e676{% elif coin.change < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
                                 {% if coin.change > 0 %}
-                                    ± +{{ coin.change | int }}%
-                                {% elif coin.change < 0 %}
-                                    ± {{ coin.change | int }}%
+                                    +{{ coin.change }}%
                                 {% else %}
-                                    ± 0%
+                                    {{ coin.change }}%
                                 {% endif %}
                             </td>
                             <td style="color: #8d8d99;">Rp {{ coin.volume_formatted }}</td>
@@ -145,11 +142,9 @@ HTML_TEMPLATE = """
                 <p style="color: #8d8d99; font-size: 14px;">Waktu Analisis: {{ waktu }} WIB | Perubahan 24h: 
                     <span style="color: {% if manual_result.change_24h > 0 %}#00e676{% elif manual_result.change_24h < 0 %}#ff4d4d{% else %}#8d8d99{% endif %}; font-weight: bold;">
                         {% if manual_result.change_24h > 0 %}
-                            ± +{{ manual_result.change_24h | int }}%
-                        {% elif manual_result.change_24h < 0 %}
-                            ± {{ manual_result.change_24h | int }}%
+                            +{{ manual_result.change_24h }}%
                         {% else %}
-                            ± 0%
+                            {{ manual_result.change_24h }}%
                         {% endif %}
                     </span>
                 </p>
@@ -157,15 +152,15 @@ HTML_TEMPLATE = """
                 <div class="grid">
                     <div class="card">
                         <h4>Harga Terakhir</h4>
-                        <p style="color: #fff;">Rp {{ "{:,.2f}".format(manual_result.latest_price) }}</p>
+                        <p style="color: #fff;">Rp {{ "{:,.2f}".format(manual_result.latest_price) if manual_result.latest_price < 100 else "{:,.0f}".format(manual_result.latest_price) }}</p>
                     </div>
                     <div class="card">
                         <h4>Harga Tertinggi (24h)</h4>
-                        <p style="color: #ff4d4d;">Rp {{ "{:,.2f}".format(manual_result.high_24h) }}</p>
+                        <p style="color: #ff4d4d;">Rp {{ "{:,.2f}".format(manual_result.high_24h) if manual_result.high_24h < 100 else "{:,.0f}".format(manual_result.high_24h) }}</p>
                     </div>
                     <div class="card">
                         <h4>Harga Terendah (24h)</h4>
-                        <p style="color: #00e676;">Rp {{ "{:,.2f}".format(manual_result.low_24h) }}</p>
+                        <p style="color: #00e676;">Rp {{ "{:,.2f}".format(manual_result.low_24h) if manual_result.low_24h < 100 else "{:,.0f}".format(manual_result.low_24h) }}</p>
                     </div>
                     <div class="card">
                         <h4>Status AI Volume</h4>
@@ -196,7 +191,7 @@ HTML_TEMPLATE = """
                                         <strong>EMA 9 / EMA 21:</strong> {{ manual_result.ema_status }}
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9.</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Harga berjalan WAJIB stabil berada di atas kurva EMA 9 atau titik pivot VWAP harian.</span>
                             </li>
                             <li>
                                 <div class="indicator-header">
@@ -205,25 +200,25 @@ HTML_TEMPLATE = """
                                         <strong>Stochastic RSI:</strong> {{ "{:.1f}".format(manual_result.stoch_rsi) }}% ({{ manual_result.stoch_status }})
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80%.</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Nilai indikator harus di BAWAH 80% (Tidak jenuh beli/Overbought).</span>
                             </li>
                             <li>
                                 <div class="indicator-header">
                                     <span>
-                                        {% if manual_result.latest_price <= manual_result.vwap * 1.008 %}✅{% else %}❌{% endif %}
-                                        <strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) }}
+                                        {% if manual_result.latest_price <= manual_result.vwap * 1.015 %}✅{% else %}❌{% endif %}
+                                        <strong>VWAP Proksimitas:</strong> Rp {{ "{:,.2f}".format(manual_result.vwap) if manual_result.vwap < 100 else "{:,.0f}".format(manual_result.vwap) }}
                                     </span>
                                 </div>
-                                <span class="indicator-rule">📌 Syarat Lolos: Posisi harga terakhir tidak boleh melebihi 0.8% di atas garis tengah VWAP.</span>
+                                <span class="indicator-rule">📌 Syarat Lolos: Posisi harga terakhir berada dalam area jangkauan aman akumulasi volume harian.</span>
                             </li>
                         </ul>
                     </div>
 
                     <p><strong style="color: {{ manual_result.entry_color }};">🟢 JAM ENTRY:</strong> <span style="color: {{ manual_result.entry_color }}; font-weight: bold;">{{ manual_result.entry_status_text }}</span></p>
-                    <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) }}</p>
-                    <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) }}</p>
+                    <p>💵 <strong>HARGA ENTRY OPTIMAL:</strong> Rp {{ "{:,.2f}".format(manual_result.price_entry) if manual_result.price_entry < 100 else "{:,.0f}".format(manual_result.price_entry) }}</p>
+                    <p style="color: #ff4d4d;">🔴 <strong>TARGET TAKE PROFIT (+1.7%):</strong> Rp {{ "{:,.2f}".format(manual_result.price_tp) if manual_result.price_tp < 100 else "{:,.0f}".format(manual_result.price_tp) }}</p>
                     <p style="color: #ffb300;">⏱️ <strong>ESTIMASI JAM TAKE PROFIT:</strong> {{ manual_result.waktu_tp_awal }} - {{ manual_result.waktu_tp_akhir }} WIB</p>
-                    <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) }}</p>
+                    <p style="color: #8d8d99; font-size: 14px;">❌ Stop Loss (Proteksi): Rp {{ "{:,.2f}".format(manual_result.price_sl) if manual_result.price_sl < 100 else "{:,.0f}".format(manual_result.price_sl) }}</p>
                 </div>
             </div>
 
@@ -269,27 +264,16 @@ HTML_TEMPLATE = """
 
 def hitung_proksi_change_24h(last, high, low):
     if high <= low:
-        return 0
+        return 0.0
     posisi_relatif = (last - low) / (high - low)
     rentang_persen = ((high - low) / low) * 100
-    mentah_persen = (posisi_relatif - 0.5) * 2 * (rentang_persen * 0.45)
-    abs_val = abs(mentah_persen)
-    
-    if abs_val < 1:
-        return round(mentah_persen, 1)
-    elif abs_val <= 10:
-        return round(mentah_persen)
-    else:
-        return round(mentah_persen / 5) * 5
+    mentah_persen = (posisi_relatif - 0.5) * 2 * (rentang_persen * 0.5)
+    return round(mentah_persen, 2)
 
 def fetch_indodax_tickers():
-    """
-    SISTEM ENHANCED BACKUP: JIKA ENDPOINT INDODAX UTAMA MEMBLOKIR, 
-    KITA GUNAKAN CLOUD PROXY GATEWAY ATAU ALTERNATIF ENDPOINT AGAR TIDAK MOGOK.
-    """
     urls = [
         "https://api.indodax.com/api/summaries",
-        "https://indodax.com/api/summaries" # Mirror Domain Endpoint Cadangan
+        "https://indodax.com/api/summaries"
     ]
     
     user_agents = [
@@ -300,25 +284,19 @@ def fetch_indodax_tickers():
     for url_endpoint in urls:
         headers = {
             "User-Agent": random.choice(user_agents),
-            "Accept": "application/json",
-            "Accept-Language": "id-ID,id;q=0.9"
+            "Accept": "application/json"
         }
-        
         try:
             cache_buster = random.randint(1000, 9999)
             target_url = f"{url_endpoint}?cb={cache_buster}"
-            
-            with requests.Session() as session:
-                res = session.get(target_url, headers=headers, timeout=6)
-                if res.status_code == 200:
-                    data = res.json()
-                    if "tickers" in data:
-                        return data, None
+            res = requests.get(target_url, headers=headers, timeout=5)
+            if res.status_code == 200:
+                data = res.json()
+                if "tickers" in data:
+                    return data, None
         except Exception:
-            continue # Jika gagal/timeout, coba endpoint berikutnya
+            continue
             
-    # Jika seluruh domain utama memblokir IP Vercel, kita buat struktur fallback 
-    # proksi internal agar fungsi pemrosesan hilir tidak crash
     return None, "Cloudflare Rate-Limit Terdeteksi"
 
 @app.route('/', methods=['GET', 'POST'])
@@ -333,11 +311,9 @@ def home():
 
         if action == "scan_potential":
             json_data, error_msg = fetch_indodax_tickers()
-            
             if not json_data:
-                # PERBAIKAN: Menghilangkan kata manual "HTTP" ganda di frontend
                 return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Indodax memblokir koneksi ({error_msg}). Server Cloudflare mendeteksi aktivitas berlebih dari IP Hosting. Silakan coba sesaat lagi.")
+                                            error=f"Indodax memblokir koneksi ({error_msg}). Server Cloudflare mendeteksi aktivitas berlebih. Silakan coba sesaat lagi.")
 
             try:
                 tickers = json_data.get('tickers', {})
@@ -362,13 +338,13 @@ def home():
                             vwap_scan = (high_price + low_price + close_price) / 3
                             stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100 if high_price > low_price else 50.0
                                 
-                            is_bullish_scan = close_price >= vwap_scan * 0.99
-                            is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.008 and stoch_rsi_scan < 80
+                            is_bullish_scan = close_price >= vwap_scan * 0.98
+                            is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.015 and stoch_rsi_scan < 80
                             
                             if is_ready_scan:
                                 entry_time_text = "SEKARANG"
                             else:
-                                m_min, m_max = (10, 20) if stoch_rsi_scan <= 20 else ((60, 120) if stoch_rsi_scan >= 80 else (30, 60))
+                                m_min, m_max = (10, 20) if stoch_rsi_scan <= 20 else (30, 60)
                                 entry_time_text = f"{(waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')} - {(waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')}"
 
                             coin_name = pair_key.replace('idr', '').upper() + "/IDR"
@@ -379,30 +355,42 @@ def home():
                             })
                             
                 top_volume_coins = sorted(all_idr_coins, key=lambda x: x['volume_raw'], reverse=True)
-                
                 response = make_response(render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=top_volume_coins[:10], manual_result=None, waktu=waktu_sekarang, error=None))
                 response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
                 return response
                 
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memproses data: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memproses data radar: {str(e)}")
 
         elif action == "analyze_manual":
             raw_input = request.form['pair'].upper().strip()
-            clean_pair = raw_input.replace("/", "").lower()
-            if not clean_pair.endswith("idr"):
-                clean_pair += "idr"
+            
+            # --- NORMALISASI STRANG FITUR 2 (PERBAIKAN UTAMA) ---
+            # Menghapus simbol "/" dan "IDR" di akhir jika pengguna menulis lengkap, lalu jadikan huruf kecil
+            clean_input = raw_input.replace("/", "").replace("IDR", "").strip().lower()
+            target_key = f"{clean_input}idr" # Format default API Indodax (ex: "hypeidr")
 
             json_data, error_msg = fetch_indodax_tickers()
             if not json_data:
                 return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Gagal mengambil data pasar ({error_msg}). Server Cloudflare membatasi koneksi hosting.")
+                                            error=f"Gagal mengambil data pasar ({error_msg}). Sila coba lagi.")
                                             
-            if clean_pair not in json_data.get('tickers', {}):
-                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
-                                            error=f"Koin '{raw_input}' tidak ditemukan di pasar IDR Indodax.")
+            tickers_data = json_data.get('tickers', {})
             
-            ticker = json_data['tickers'][clean_pair]
+            # Jika target_key tidak langsung ketemu, kita cari partisi kecocokan parsial dalam ticker keys
+            if target_key not in tickers_data:
+                found_key = None
+                for k in tickers_data.keys():
+                    if clean_input in k and k.endswith('idr'):
+                        found_key = k
+                        break
+                if found_key:
+                    target_key = found_key
+                else:
+                    return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
+                                                error=f"Koin '{raw_input}' tidak ditemukan di pasar IDR Indodax. Pastikan kode koin benar (Contoh: HYPE, BTC, atau SIREN).")
+            
+            ticker = tickers_data[target_key]
             latest_price = float(ticker.get('last', 0))
             high_24h = float(ticker.get('high', 0))
             low_24h = float(ticker.get('low', 0))
@@ -413,27 +401,29 @@ def home():
             ema_9 = (latest_price * 0.6) + (high_24h * 0.4)
             ema_21 = (high_24h + low_24h) / 2
             
-            is_bullish = latest_price >= vwap * 0.99
+            is_bullish = latest_price >= vwap * 0.98
             ema_status = "BULLISH SUPPORT" if is_bullish else "BEARISH REJECTION"
 
             stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100 if high_24h > low_24h else 50.0
             stoch_status = "OVERBOUGHT" if stoch_rsi >= 80 else ("OVERSOLD" if stoch_rsi <= 20 else "KONSOLIDASI")
             
-            is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
+            is_ready = is_bullish and latest_price <= vwap * 1.015 and stoch_rsi < 80
             
             if is_ready:
                 signal = "BOLEH ENTRY (Setup Scalping Tervalidasi)"
                 price_entry = latest_price
-                reason = f"Kombinasi data proksi valid. Harga berjalan aman di zona akumulasi."
+                reason = "Kombinasi data proksi valid. Harga berjalan aman di zona akumulasi volume harian."
                 entry_status_text = f"SEKARANG (Sebelum {(waktu_sekarang_obj + timedelta(minutes=15)).strftime('%H:%M')} WIB)"
                 entry_color = "#00e676"
             else:
                 signal = "WAIT & SEE (Setup Belum Matang / Rawan Koreksi)"
-                price_entry = vwap
-                reason = f"Harga terindikasi tertahan resisten harian atau indikator osilator jenuh."
+                price_entry = vwap if vwap > 0 else latest_price
+                reason = "Harga terindikasi tertahan resisten harian atau indikator osilator berada di area jenuh beli."
                 m_min = 10 if stoch_rsi <= 20 else 30
                 entry_status_text = f"NANTI (Saran re-entry aman setelah jam {(waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')} WIB)"
                 entry_color = "#ffb300"
+
+            display_name = target_key.replace('idr', '').upper() + "/IDR"
 
             data_res = {
                 "latest_price": latest_price, "high_24h": high_24h, "low_24h": low_24h, "vwap": vwap,
@@ -446,7 +436,7 @@ def home():
                 "waktu_tp_akhir": (waktu_sekarang_obj + timedelta(minutes=45)).strftime("%H:%M")
             }
             
-            return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
+            return render_template_string(HTML_TEMPLATE, pair=display_name, potential_coins=None, manual_result=data_res, waktu=waktu_sekarang, error=None)
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
 
