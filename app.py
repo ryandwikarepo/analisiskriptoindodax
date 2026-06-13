@@ -61,7 +61,7 @@ HTML_TEMPLATE = """
         .badge-entry { background-color: #00c853; border: 1px solid #00e676; }
         .badge-wait { background-color: #b71c1c; border: 1px solid #ff4d4d; }
         
-        .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; }
+        .error { color: #f74040; background: #3a1a1a; padding: 15px; border-radius: 6px; border-left: 5px solid #f74040; margin-top: 15px; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -87,7 +87,7 @@ HTML_TEMPLATE = """
         </div>
 
         {% if error %}
-            <div class="error">⚠️ {{ error }}</div>
+            <div class="error">⚠️ <strong>Sistem Memperoleh Kendala:</strong><br>{{ error }}</div>
         {% endif %}
 
         {% if potential_coins %}
@@ -335,7 +335,7 @@ HTML_TEMPLATE = """
 """
 
 # ==============================================================================
-# LOGIKA BACKEND FLASK NATIVE INDODAX API (100% SINKRON)
+# LOGIKA BACKEND DENGAN BYPASS HEADERS CLOUDFLARE ANTI-BOT
 # ==============================================================================
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -344,9 +344,11 @@ def home():
     waktu_sekarang_obj = datetime.now(tz_jkt)
     waktu_sekarang = waktu_sekarang_obj.strftime('%d %B %Y, %H:%M')
     
-    # Menghindari Vercel Edge Caching agar data selalu fresh saat reload
+    # 🌟 HEADERS LENGKAP: Menyamar sebagai Browser Chrome asli agar tidak diblokir Indodax/Cloudflare
     headers_api = {
-        "User-Agent": "Mozilla/5.0",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
         "Cache-Control": "no-cache",
         "Pragma": "no-cache"
     }
@@ -357,62 +359,50 @@ def home():
         # FITUR 1: SCANNER RADAR POTENSIAL
         if action == "scan_potential":
             try:
-                # Menggunakan API Summary Indodax untuk mendapatkan data open harian asli
                 res = requests.get("https://api.indodax.com/api/summaries", headers=headers_api, timeout=10)
-                json_data = res.json()
                 
+                # Cek jika server Indodax menolak/memberikan kode status error (seperti 403 Forbidden atau 502)
+                if res.status_code != 200:
+                    return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
+                                                error=f"Indodax memblokir koneksi (HTTP {res.status_code}). Server Cloudflare mendeteksi aktivitas berlebih. Silakan tunggu 1-2 menit lalu coba lagi.")
+
+                json_data = res.json()
                 tickers = json_data.get('tickers', {})
                 prices_24h = json_data.get('prices_24h', {})
                 
                 all_idr_coins = []
                 for pair_key, ticker in tickers.items():
-                    # Filter pasar IDR saja dan singkirkan koin utama jika ingin fokus ke koin alternatif (altcoins)
                     if pair_key.endswith('idr') and pair_key not in ['btcidr', 'ethidr']:
                         close_price = float(ticker.get('last', 0))
                         high_price = float(ticker.get('high', 0))
                         low_price = float(ticker.get('low', 0))
                         
-                        # 1. FIXED SINKRONISASI VOLUME: Ambil 'vol_idr' bawaan dari sistem internal Indodax
                         volume_idr = float(ticker.get('vol_idr', 0))
                         if volume_idr == 0:
-                            # Fallback jikalau koin baru belum mengkalkulasi volume idr harian
                             base_vol = float(ticker.get('vol_' + pair_key.replace('idr', ''), 0))
                             volume_idr = base_vol * close_price
                         
-                        # 2. FIXED SINKRONISASI KENAIKAN: Hitung berdasarkan Open Price 24 jam lalu
                         open_price_24h = float(prices_24h.get(pair_key, 0))
                         if open_price_24h > 0:
                             change_24h = ((close_price - open_price_24h) / open_price_24h) * 100
                         else:
-                            # Fallback cadangan jika harga open tidak terlempar dari API
                             change_24h = 0.0
                         
-                        # Hanya proses koin dengan likuiditas volume diatas Rp 1 Miliar
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
-                            ema_9_scan = (close_price * 0.7) + (high_price * 0.3)
-                            
-                            if high_price > low_price:
-                                stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100
-                            else:
-                                stoch_rsi_scan = 50.0
+                            stoch_rsi_scan = ((close_price - low_price) / (high_price - low_price)) * 100 if high_price > low_price else 50.0
                                 
-                            is_bullish_scan = close_price >= len([ema_9_scan]) # Dummy check replacement 
                             is_bullish_scan = close_price >= vwap_scan * 0.99
                             is_ready_scan = is_bullish_scan and close_price <= vwap_scan * 1.008 and stoch_rsi_scan < 80
                             
                             if is_ready_scan:
                                 entry_time_text = "SEKARANG"
                             else:
-                                if stoch_rsi_scan <= 20: m_min, m_max = 10, 20
-                                elif stoch_rsi_scan >= 80: m_min, m_max = 60, 120
-                                else: m_min, m_max = 30, 60
-                                    
+                                m_min, m_max = (10, 20) if stoch_rsi_scan <= 20 else ((60, 120) if stoch_rsi_scan >= 80 else (30, 60))
                                 t_min = (waktu_sekarang_obj + timedelta(minutes=m_min)).strftime('%H:%M')
                                 t_max = (waktu_sekarang_obj + timedelta(minutes=m_max)).strftime('%H:%M')
                                 entry_time_text = f"{t_min} - {t_max}"
 
-                            # Format Nama Tampilan Pair (contoh: usdtidr -> USDT/IDR)
                             coin_name = pair_key.replace('idr', '').upper() + "/IDR"
 
                             all_idr_coins.append({
@@ -428,23 +418,25 @@ def home():
                 return response
                 
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memindai radar Indodax: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Gagal memparsing data JSON. Indodax mengirimkan dokumen proteksi bot. Detail: {str(e)}")
 
         # FITUR 2: ANALISIS MANUAL DETIL + SEBUTAN TARGET
         elif action == "analyze_manual":
             raw_input = request.form['pair'].upper().strip()
-            
-            # Normalisasi Input agar bisa membaca "SIREN", "siren/idr", maupun "SIRENIDR"
             clean_pair = raw_input.replace("/", "")
             if not clean_pair.endswith("IDR"):
                 clean_pair = clean_pair + "IDR"
             
-            pair_key_api = clean_pair.lower() # API Indodax menggunakan format lowercase tanpa slash
+            pair_key_api = clean_pair.lower()
 
             try:
                 res = requests.get("https://api.indodax.com/api/summaries", headers=headers_api, timeout=10)
-                json_data = res.json()
                 
+                if res.status_code != 200:
+                    return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, 
+                                                error=f"Akses manual diblokir Indodax (HTTP {res.status_code}). Silakan coba sesaat lagi.")
+
+                json_data = res.json()
                 tickers = json_data.get('tickers', {})
                 prices_24h = json_data.get('prices_24h', {})
                 
@@ -456,12 +448,8 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # 3. FIXED SINKRONISASI MANUAL KENAIKAN 24H
                 open_price_24h = float(prices_24h.get(pair_key_api, 0))
-                if open_price_24h > 0:
-                    change_24h_manual = ((latest_price - open_price_24h) / open_price_24h) * 100
-                else:
-                    change_24h_manual = 0.0
+                change_24h_manual = ((latest_price - open_price_24h) / open_price_24h) * 100 if open_price_24h > 0 else 0.0
                 
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
@@ -474,14 +462,8 @@ def home():
                     ema_status = "BEARISH REJECTION (Harga tertekan di bawah batas aman)"
                     is_bullish = False
 
-                if high_24h > low_24h:
-                    stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100
-                else:
-                    stoch_rsi = 50.0
-
-                if stoch_rsi >= 80: stoch_status = "OVERBOUGHT (Jenuh Beli)"
-                elif stoch_rsi <= 20: stoch_status = "OVERSOLD (Jenuh Jual)"
-                else: stoch_status = "KONSOLIDASI (Squeeze Area)"
+                stoch_rsi = ((latest_price - low_24h) / (high_24h - low_24h)) * 100 if high_24h > low_24h else 50.0
+                stoch_status = "OVERBOUGHT (Jenuh Beli)" if stoch_rsi >= 80 else ("OVERSOLD (Jenuh Jual)" if stoch_rsi <= 20 else "KONSOLIDASI (Squeeze Area)")
                 
                 is_ready = is_bullish and latest_price <= vwap * 1.008 and stoch_rsi < 80
                 
@@ -496,10 +478,7 @@ def home():
                     price_entry = vwap if latest_price > vwap else latest_price
                     reason = f"Struktur grafik terindikasi memicu Bearish Rejection dari resisten terdekat harian atau harga bergerak menjauh dari area aman akumulasi bandar."
                     
-                    if stoch_rsi <= 20: menit_tunggu_min, menit_tunggu_max = 10, 20
-                    elif stoch_rsi >= 80: menit_tunggu_min, menit_tunggu_max = 60, 120
-                    else: menit_tunggu_min, menit_tunggu_max = 30, 60
-                        
+                    menit_tunggu_min, menit_tunggu_max = (10, 20) if stoch_rsi <= 20 else ((60, 120) if stoch_rsi >= 80 else (30, 60))
                     jam_nanti_min = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_min)).strftime('%H:%M')
                     jam_nanti_max = (waktu_sekarang_obj + timedelta(minutes=menit_tunggu_max)).strftime('%H:%M')
                     
@@ -508,7 +487,6 @@ def home():
 
                 price_tp = price_entry * 1.017
                 price_sl = price_entry * 0.99
-                
                 display_pair_name = pair_key_api.replace("idr", "").upper() + "/IDR"
 
                 data_res = {
@@ -526,7 +504,7 @@ def home():
                 return response
 
             except Exception as e:
-                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koneksi Indodax terputus: {str(e)}")
+                return render_template_string(HTML_TEMPLATE, pair=raw_input, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=f"Koneksi terputus saat memparsing data manual: {str(e)}")
                 
     return render_template_string(HTML_TEMPLATE, pair=pair, potential_coins=None, manual_result=None, waktu=waktu_sekarang, error=None)
 
