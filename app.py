@@ -361,10 +361,15 @@ def home():
                         base_volume = ticker.get('baseVolume', 0) or 0
                         volume_idr = base_volume * close_price
                         
-                        # FIX: Ambil data perubahan langsung dari API Indodax
-                        change_24h = ticker.get('percentage', 0.0)
-                        if change_24h is None:
-                            change_24h = 0.0
+                        # FIX PERMANEN: Ambil persentase perubahan dari raw info API Indodax
+                        change_24h = 0.0
+                        if 'info' in ticker:
+                            change_24h_raw = ticker['info'].get('pct') or ticker['info'].get('percentage') or ticker.get('percentage')
+                            if change_24h_raw is not None:
+                                try:
+                                    change_24h = float(change_24h_raw)
+                                except ValueError:
+                                    change_24h = 0.0
                         
                         if volume_idr > 1000000000:
                             vwap_scan = (high_price + low_price + close_price) / 3
@@ -413,8 +418,15 @@ def home():
                 high_24h = float(ticker['high'])
                 low_24h = float(ticker['low'])
                 
-                # FIX: Ambil persentase perubahan dari API
-                change_24h_manual = ticker.get('percentage', 0.0) or 0.0
+                # FIX PERMANEN: Ambil persentase dari raw info API Indodax
+                change_24h_manual = 0.0
+                if 'info' in ticker:
+                    change_24h_raw = ticker['info'].get('pct') or ticker['info'].get('percentage') or ticker.get('percentage')
+                    if change_24h_raw is not None:
+                        try:
+                            change_24h_manual = float(change_24h_raw)
+                        except ValueError:
+                            change_24h_manual = 0.0
                 
                 vwap = (high_24h + low_24h + latest_price) / 3
                 ema_9 = (latest_price * 0.7) + (high_24h * 0.3)
